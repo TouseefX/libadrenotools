@@ -1,6 +1,6 @@
 name: Build libadrenotools
 on: 
-  workflow_dispatch: # Allows manual trigger from the Actions tab
+  workflow_dispatch:
 
 jobs:
   build:
@@ -9,12 +9,12 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          submodules: recursive # Important: libadrenotools has many submodules
+          submodules: recursive
 
       - name: Set up NDK
         uses: nttld/setup-ndk@v1
         with:
-          ndk-version: r25c # Using nttld (double 't')
+          ndk-version: r25c
           add-to-path: true
 
       - name: Build with CMake
@@ -26,11 +26,14 @@ jobs:
             -DANDROID_PLATFORM=android-26 \
             -DCMAKE_BUILD_TYPE=Release
           make -j$(nproc)
+          
+      - name: List files (Diagnostic)
+        run: find build -name "*.so"
 
-      - name: Upload libadrenotools.so
+      - name: Upload any compiled library
         uses: actions/upload-artifact@v4
         with:
           name: libadrenotools-arm64
-          # The '**' searches all subdirectories inside build
-          path: build/**/libadrenotools.so
+          # This will grab any .so file found anywhere in the build folder
+          path: build/**/*.so
           if-no-files-found: error
