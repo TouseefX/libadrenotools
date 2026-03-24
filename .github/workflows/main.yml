@@ -31,4 +31,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: libadrenotools-arm64
-          path: build/libadrenotools.so
+          # The '**' searches all subdirectories inside build
+          path: build/**/libadrenotools.so
+          if-no-files-found: error
