@@ -212,32 +212,48 @@ void adrenotools_set_turbo(bool turbo) {
 }
 
 #define ALOGI(...) __android_log_print(ANDROID_LOG_INFO, "AdrenoToolsPatch", __VA_ARGS__)
+#define ALOGE(...) __android_log_print(ANDROID_LOG_ERROR, "AdrenoToolsPatch", __VA_ARGS__)
 
 __attribute__((constructor))
 void auto_init_roblox_driver() {
+    static bool initialized = false;
+    if (initialized) return;
+    initialized = true;
+
     Dl_info info;
     if (dladdr((void*)auto_init_roblox_driver, &info)) {
         std::string full_path = info.dli_fname;
         std::string lib_dir = full_path.substr(0, full_path.find_last_of("/"));
-        std::string final_path = lib_dir + "/";
         
-        const char* tmp_dir = "/data/data/com.roblox.client.samsunggalaxy/cache";
+        const char* driver_name = "libvulkan_freedreno.so";
+        std::string driver_full_path = lib_dir + "/" + driver_name;
 
-        ALOGI("Injected! Searching for driver in: %s", final_path.c_str());
+        // 1. Check if the driver file actually exists in that folder
+        if (access(driver_full_path.c_str(), F_OK) == 0) {
+            ALOGI("FOUND: %s is present.", driver_name);
+        } else {
+            ALOGE("MISSING: %s NOT found in %s", driver_name, lib_dir.c_str());
+            return; // Stop here if the file is missing
+        }
+
+        // 2. Try to load
+        const char* tmp_dir = "/data/data/com.roblox.client.samsunggalaxy/cache";
         
         void* handle = adrenotools_open_libvulkan(
             RTLD_NOW, 
             1, 
-            tmp_dir,               // tmpLibDir (Writable)
-            final_path.c_str(),    // hookLibDir (Read-only is fine)
-            final_path.c_str(),    // customDriverDir
-            "libvulkan_freedreno.so", 
+            tmp_dir, 
+            lib_dir.c_str(), 
+            lib_dir.c_str(), 
+            driver_name, 
             nullptr, 
             nullptr
         );
 
         if (handle) {
             ALOGI("SUCCESS: Driver is now ACTIVE!");
+        } else {
+            ALOGE("FAILURE: AdrenoTools failed to hook the driver. (Check if hooks are in the same folder!)");
         }
     }
 }
