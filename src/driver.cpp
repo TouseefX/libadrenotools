@@ -7,6 +7,7 @@
 #include <sys/stat.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
+#include <stdio.h>
 #include <dlfcn.h>
 #include <fcntl.h>
 #include <android/api-level.h>
@@ -210,55 +211,44 @@ void adrenotools_set_turbo(bool turbo) {
     close (kgslFd);
 }
 
-// Helper to find the current library path dynamically
-std::string get_lib_path() {
-    std::ifstream maps("/proc/self/maps");
-    std::string line;
-    while (std::getline(maps, line)) {
-        if (line.find("libadreno_injector.so") != std::string::npos) {
-            size_t path_start = line.find('/');
-            if (path_start != std::string::npos) {
-                std::string full_path = line.substr(path_start);
-                return full_path.substr(0, full_path.find_last_of('/'));
-            }
-        }
-    }
-    return "/data/data/com.roblox.client.samsunggalaxy/lib"; // Fallback
-}
+extern "C" void* adrenotools_open_libvulkan(int, int, const char*, const char*, const char*, const char*, const char*, void*);
+
 __attribute__((constructor))
 void auto_init_roblox_driver() {
     static bool initialized = false;
     if (initialized) return;
     initialized = true;
 
-    __android_log_print(ANDROID_LOG_INFO, "AdrenoToolsPatch", "Roblox Galaxy Version Detected. Initializing...");
-
-    // Galaxy Store Package Name
-    const char* pkg = "com.roblox.client.samsunggalaxy";
+    __android_log_print(ANDROID_LOG_INFO, "AdrenoToolsPatch", "MTR Driver Injector Starting...");
     
-    // Construct the path to where Android installs the .so files in the APK
-    std::string dynamic_path = get_lib_path();
-    const char* lib_path = dynamic_path.c_str();
+    Dl_info info;
+    if (dladdr((void*)auto_init_roblox_driver, &info)) {
+        std::string full_path(info.dli_fname);
+        // Get the directory containing this library
+        std::string lib_dir = full_path.substr(0, full_path.find_last_of("/"));
+        const char* final_path = lib_dir.c_str();
 
-    // Custom Driver Filename
-    const char* driver_name = "libvulkan_freedreno.so";
+        __android_log_print(ANDROID_LOG_INFO, "AdrenoToolsPatch", "Detected Lib Path: %s", final_path);
+        
+        const char* driver_name = "libvulkan_freedreno.so";
+        
+        void* handle = adrenotools_open_libvulkan(
+            RTLD_NOW,
+            0x00000001, 
+            nullptr,      // tmpLibDir (not needed for modern Android)
+            final_path,   // hookLibDir (where libhook_impl.so is)
+            final_path,   // customDriverDir (where Turnip MTR is)
+            driver_name,
+            nullptr,      // fileRedirectDir
+            nullptr       // userMappingHandle
+        );
 
-    // Call the main library function
-    // 0x00000001 is the bitmask for ADRENOTOOLS_DRIVER_CUSTOM
-    void* handle = adrenotools_open_libvulkan(
-        RTLD_NOW,
-        0x00000001, 
-        nullptr,      // tmpLibDir (not needed for API 29+)
-        lib_path,     // hookLibDir (where hooks are)
-        lib_path,     // customDriverDir (where driver is)
-        driver_name,
-        nullptr,      // fileRedirectDir
-        nullptr       // userMappingHandle
-    );
-
-    if (handle) {
-        __android_log_print(ANDROID_LOG_INFO, "AdrenoToolsPatch", "SUCCESS: Custom driver %s loaded.", driver_name);
+        if (handle) {
+            __android_log_print(ANDROID_LOG_INFO, "AdrenoToolsPatch", "SUCCESS: Turnip MTR 3.0.0 loaded!");
+        } else {
+            __android_log_print(ANDROID_LOG_ERROR, "AdrenoToolsPatch", "FAILURE: AdrenoTools could not hook driver at %s", final_path);
+        }
     } else {
-        __android_log_print(ANDROID_LOG_ERROR, "AdrenoToolsPatch", "FAILURE: Could not open custom driver.");
+        __android_log_print(ANDROID_LOG_ERROR, "AdrenoToolsPatch", "CRITICAL: dladdr failed to find library path.");
     }
 }
