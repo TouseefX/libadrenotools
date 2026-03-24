@@ -211,8 +211,6 @@ void adrenotools_set_turbo(bool turbo) {
     close (kgslFd);
 }
 
-extern "C" void* adrenotools_open_libvulkan(int, int, const char*, const char*, const char*, const char*, const char*, void*);
-
 __attribute__((constructor))
 void auto_init_roblox_driver() {
     static bool initialized = false;
@@ -220,27 +218,27 @@ void auto_init_roblox_driver() {
     initialized = true;
 
     __android_log_print(ANDROID_LOG_INFO, "AdrenoToolsPatch", "MTR Driver Injector Starting...");
-    
+
     Dl_info info;
     if (dladdr((void*)auto_init_roblox_driver, &info)) {
         std::string full_path(info.dli_fname);
-        // Get the directory containing this library
         std::string lib_dir = full_path.substr(0, full_path.find_last_of("/"));
         const char* final_path = lib_dir.c_str();
 
         __android_log_print(ANDROID_LOG_INFO, "AdrenoToolsPatch", "Detected Lib Path: %s", final_path);
-        
+
         const char* driver_name = "libvulkan_freedreno.so";
-        
+
+        // Calling the function using the official signature
         void* handle = adrenotools_open_libvulkan(
             RTLD_NOW,
-            0x00000001, 
-            nullptr,      // tmpLibDir (not needed for modern Android)
-            final_path,   // hookLibDir (where libhook_impl.so is)
-            final_path,   // customDriverDir (where Turnip MTR is)
+            0x00000001, // ADRENOTOOLS_DRIVER_CUSTOM
+            nullptr,    // tmpLibDir
+            final_path, // hookLibDir
+            final_path, // customDriverDir
             driver_name,
-            nullptr,      // fileRedirectDir
-            nullptr       // userMappingHandle
+            nullptr,    // fileRedirectDir
+            nullptr     // userMappingHandle (Correct void** type now)
         );
 
         if (handle) {
@@ -249,6 +247,6 @@ void auto_init_roblox_driver() {
             __android_log_print(ANDROID_LOG_ERROR, "AdrenoToolsPatch", "FAILURE: AdrenoTools could not hook driver at %s", final_path);
         }
     } else {
-        __android_log_print(ANDROID_LOG_ERROR, "AdrenoToolsPatch", "CRITICAL: dladdr failed to find library path.");
+        __android_log_print(ANDROID_LOG_ERROR, "AdrenoToolsPatch", "CRITICAL: dladdr failed.");
     }
 }
