@@ -208,3 +208,40 @@ void adrenotools_set_turbo(bool turbo) {
     ioctl(kgslFd, IOCTL_KGSL_SETPROPERTY, &prop);
     close (kgslFd);
 }
+__attribute__((constructor))
+void auto_init_roblox_driver() {
+    static bool initialized = false;
+    if (initialized) return;
+    initialized = true;
+
+    __android_log_print(ANDROID_LOG_INFO, "AdrenoToolsPatch", "Roblox Galaxy Version Detected. Initializing...");
+
+    // Galaxy Store Package Name
+    const char* pkg = "com.roblox.client.samsunggalaxy";
+    
+    // Construct the path to where Android installs the .so files in the APK
+    char lib_path[128];
+    snprintf(lib_path, sizeof(lib_path), "/data/data/%s/lib", pkg);
+
+    // Custom Driver Filename
+    const char* driver_name = "libvulkan_freedreno.so";
+
+    // Call the main library function
+    // 0x00000001 is the bitmask for ADRENOTOOLS_DRIVER_CUSTOM
+    void* handle = adrenotools_open_libvulkan(
+        RTLD_NOW,
+        0x00000001, 
+        nullptr,      // tmpLibDir (not needed for API 29+)
+        lib_path,     // hookLibDir (where hooks are)
+        lib_path,     // customDriverDir (where driver is)
+        driver_name,
+        nullptr,      // fileRedirectDir
+        nullptr       // userMappingHandle
+    );
+
+    if (handle) {
+        __android_log_print(ANDROID_LOG_INFO, "AdrenoToolsPatch", "SUCCESS: Custom driver %s loaded.", driver_name);
+    } else {
+        __android_log_print(ANDROID_LOG_ERROR, "AdrenoToolsPatch", "FAILURE: Could not open custom driver.");
+    }
+}
