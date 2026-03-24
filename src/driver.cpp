@@ -221,39 +221,43 @@ void auto_init_roblox_driver() {
     initialized = true;
 
     Dl_info info;
-    if (dladdr((void*)auto_init_roblox_driver, &info)) {
-        std::string full_path = info.dli_fname;
-        std::string lib_dir = full_path.substr(0, full_path.find_last_of("/"));
-        
-        const char* driver_name = "libvulkan_freedreno.so";
-        std::string driver_full_path = lib_dir + "/" + driver_name;
+    if (!dladdr((void*)auto_init_roblox_driver, &info)) {
+        ALOGE("dladdr failed");
+        return;
+    }
 
-        // 1. Check if the driver file actually exists in that folder
-        if (access(driver_full_path.c_str(), F_OK) == 0) {
-            ALOGI("FOUND: %s is present.", driver_name);
-        } else {
-            ALOGE("MISSING: %s NOT found in %s", driver_name, lib_dir.c_str());
-            return; // Stop here if the file is missing
-        }
+    std::string full_path = info.dli_fname;
+    std::string lib_dir = full_path.substr(0, full_path.find_last_of("/"));
 
-        // 2. Try to load
-        const char* tmp_dir = "/data/data/com.roblox.client.samsunggalaxy/cache";
-        
-        void* handle = adrenotools_open_libvulkan(
-            RTLD_NOW, 
-            1, 
-            tmp_dir, 
-            lib_dir.c_str(), 
-            lib_dir.c_str(), 
-            driver_name, 
-            nullptr, 
-            nullptr
-        );
+    const char* driver_name = "libvulkan_freedreno.so";
+    std::string driver_full_path = lib_dir + "/" + driver_name;
 
-        if (handle) {
-            ALOGI("SUCCESS: Driver is now ACTIVE!");
-        } else {
-            ALOGE("FAILURE: AdrenoTools failed to hook the driver. (Check if hooks are in the same folder!)");
-        }
+    if (access(driver_full_path.c_str(), F_OK) != 0) {
+        ALOGE("MISSING: %s not found in %s", driver_name, lib_dir.c_str());
+        return;
+    }
+    ALOGI("FOUND: %s", driver_name);
+    
+    const char* tmp_dir = getenv("TMPDIR");
+    if (!tmp_dir) tmp_dir = "/data/data/com.roblox.client/cache"; // fallback
+
+    ALOGI("lib_dir: %s", lib_dir.c_str());
+    ALOGI("tmp_dir: %s", tmp_dir);
+
+    void* handle = adrenotools_open_libvulkan(
+        RTLD_NOW,
+        ADRENOTOOLS_DRIVER_CUSTOM,
+        tmp_dir,
+        lib_dir.c_str(),
+        lib_dir.c_str(),
+        driver_name,
+        nullptr,
+        nullptr
+    );
+
+    if (handle) {
+        ALOGI("SUCCESS: Custom driver active!");
+    } else {
+        ALOGE("FAILURE: %s", dlerror());
     }
 }
