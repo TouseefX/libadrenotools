@@ -288,7 +288,7 @@ static void init_turnip_driver() {
     if (handle) {
         ALOGI("SUCCESS: Custom driver active!");
     } else {
-        ALOGE("FAILURE: %s", dlerror());
+        ALOGE("FAILURE: adrenotools_open_libvulkan returned null");
     }
 }
 
