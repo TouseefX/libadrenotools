@@ -1,8 +1,8 @@
-Forked Verison of libanderotools design to run on roblox (galaxy store)
+Forked Verison of libanderotools design to run on native Android apps
 
 credits to Pipetto-crypto for fixes and patches
 
-Tested with Roblox (Galaxy Store Verison) with Turniup MTR 3.0.0 AXxx
+Tested with Roblox (Galaxy Store Verison) with Turniup MTR 3.0.0 AXxx S20 Ultra 5G
 different is high alot of fps boost it seems slow at frist but gets faster
 I will release apk but roblox anti cheat flags it as tempering framework
 
