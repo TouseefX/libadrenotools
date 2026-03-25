@@ -331,7 +331,7 @@ static void init_turnip_driver() {
     }
 }
 
-__attribute__((constructor(100)))
+__attribute__((constructor(1)))
 void auto_init_driver() {
     static bool initialized = false;
     if (initialized) return;
@@ -354,5 +354,5 @@ void auto_init_driver() {
         ALOGI("linkernsbypass ready after %dms. Initializing Turnip...", elapsed);
         init_turnip_driver();
     });
-    loader.join();
+    loader.detach();
 }
