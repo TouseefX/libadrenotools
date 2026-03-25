@@ -19,6 +19,7 @@ jobs:
 
       - name: Build with CMake
         run: |
+          git submodule update --init --recursive
           mkdir build && cd build
           cmake .. \
             -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
@@ -34,7 +35,7 @@ jobs:
       - name: Upload any compiled library
         uses: actions/upload-artifact@v4
         with:
-          name: libadrenotools-arm64
+          name: libadrenotools-arm64-v8a
           # This will grab any .so file found anywhere in the build folder
           path: build/**/*.so
           if-no-files-found: error
