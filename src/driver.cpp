@@ -264,6 +264,7 @@ static void init_turnip_driver() {
     
     mkdir((base_data_dir + "/cache").c_str(), 0777); 
     mkdir(cache_dir.c_str(), 0777);
+    chmod(cache_dir.c_str(), 0777);
     
     std::string driver_name = "libvulkan_freedreno.so";
     std::string src_path = hook_lib_dir + "/" + driver_name;
@@ -330,7 +331,7 @@ static void init_turnip_driver() {
     }
 }
 
-__attribute__((constructor(0)))
+__attribute__((constructor(50)))
 void auto_init_driver() {
     static bool initialized = false;
     if (initialized) return;
