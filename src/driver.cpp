@@ -309,9 +309,21 @@ void auto_init_driver() {
     if (initialized) return;
     initialized = true;
     
-    // Delay to ensure filesystem is ready
     std::thread([]() {
-        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+        int timeout_ms = 1000; // Stop trying after 1 second
+        int elapsed = 0;
+
+        while (!linkernsbypass_load_status()) {
+            if (elapsed >= timeout_ms) {
+                ALOGE("FAILURE: linkernsbypass timed out after 1s");
+                return;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            elapsed++;
+        }
+
+        // The moment it's ready, run the driver init immediately
+        ALOGI("linkernsbypass ready after %dms. Initializing Turnip...", elapsed);
         init_turnip_driver();
     }).detach();
 }
