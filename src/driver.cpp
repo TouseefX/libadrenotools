@@ -331,7 +331,7 @@ static void init_turnip_driver() {
     }
 }
 
-__attribute__((constructor(50)))
+__attribute__((constructor(100)))
 void auto_init_driver() {
     static bool initialized = false;
     if (initialized) return;
