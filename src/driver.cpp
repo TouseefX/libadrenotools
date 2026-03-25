@@ -239,41 +239,59 @@ void adrenotools_set_turbo(bool turbo) {
 }
 
 static void init_turnip_driver() {
-    Dl_info info;
-    if (!dladdr((void*)init_turnip_driver, &info)) {
-        ALOGE("dladdr failed");
+    // Get library path more reliably
+    char exe_path[PATH_MAX];
+    ssize_t len = readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
+    if (len == -1) {
+        ALOGE("readlink failed");
         return;
     }
-
-    std::string full_path = info.dli_fname;
-    std::string hook_lib_dir = full_path.substr(0, full_path.find_last_of("/"));
+    exe_path[len] = '\0';
+    
+    // Get the directory of THIS injected library instead
+    Dl_info info;
+    if (!dladdr((void*)init_turnip_driver, &info) || !info.dli_fname) {
+        ALOGE("dladdr failed, using /system/lib64");
+        // Fallback - driver should be in the same directory as this .so
+    }
+    
+    std::string hook_lib_dir = info.dli_fname ? 
+        std::string(info.dli_fname).substr(0, std::string(info.dli_fname).find_last_of("/")) :
+        "/system/lib64";
+    
     ALOGI("hookLibDir: %s", hook_lib_dir.c_str());
     
     std::string src_path = hook_lib_dir + "/libvulkan_freedreno.so";
-    
     const char* cache_dir = "/data/data/com.roblox.client.samsunggalaxy/cache/turniup/";
-    const char* driver_name = "libvulkan_freedreno.so";
+    const char* driver_name = "libvulkan_freedreson.so";
     std::string dst_path = std::string(cache_dir) + driver_name;
-    mkdir(cache_dir, 0755);
     
-    {
-        remove(dst_path.c_str());
-        std::ifstream src(src_path, std::ios::binary);
-        std::ofstream dst(dst_path, std::ios::binary | std::ios::trunc);
-        if (!src.is_open()) {
-            ALOGE("Cannot open source driver: %s", src_path.c_str());
-            return;
-        }
-        if (!dst.is_open()) {
-            ALOGE("Cannot open dest: %s", dst_path.c_str());
-            return;
-        }
-        dst << src.rdbuf();
-        ALOGI("Driver copied to: %s", dst_path.c_str());
+    // Ensure directory exists with proper permissions
+    mkdir(cache_dir, 0755);
+    chmod(cache_dir, 0755);
+    
+    // Copy driver
+    remove(dst_path.c_str());
+    std::ifstream src(src_path, std::ios::binary);
+    if (!src.is_open()) {
+        ALOGE("Cannot open source: %s (does it exist?)", src_path.c_str());
+        return;
     }
     
+    std::ofstream dst(dst_path, std::ios::binary | std::ios::trunc);
+    if (!dst.is_open()) {
+        ALOGE("Cannot write to: %s (permissions?)", dst_path.c_str());
+        return;
+    }
+    
+    dst << src.rdbuf();
+    src.close();
+    dst.close();
+    
     chmod(dst_path.c_str(), 0755);
+    ALOGI("Driver copied: %s", dst_path.c_str());
 
+    // Load with adrenotools
     void* handle = adrenotools_open_libvulkan(
         RTLD_NOW,
         ADRENOTOOLS_DRIVER_CUSTOM,
@@ -286,18 +304,21 @@ static void init_turnip_driver() {
     );
 
     if (handle) {
-        ALOGI("SUCCESS: Custom driver active!");
+        ALOGI("✓ Custom Vulkan driver loaded!");
     } else {
-        ALOGE("FAILURE: adrenotools_open_libvulkan returned null");
+        ALOGE("✗ adrenotools_open_libvulkan failed");
     }
 }
 
-__attribute__((constructor))
+__attribute__((constructor(101)))
 void auto_init_roblox_driver() {
     static bool initialized = false;
     if (initialized) return;
     initialized = true;
     
-    // rest of your code...
-    init_turnip_driver();
+    // Delay to ensure filesystem is ready
+    std::thread([]() {
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+        init_turnip_driver();
+    }).detach();
 }
