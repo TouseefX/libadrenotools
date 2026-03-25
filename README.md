@@ -2,6 +2,10 @@ Forked Verison of libanderotools design to run on roblox (galaxy store)
 
 credits to Pipetto-crypto for fixes and patches
 
+Tested with Roblox (Galaxy Store Verison) with Turniup MTR 3.0.0 AXxx
+different is high alot of fps boost it seems slow at frist but gets faster
+I will release apk but roblox anti cheat flags it as tempering framework
+
 ### Adreno Tools 
 A library for applying rootless Adreno GPU driver modifications/replacements. Currently supports loading custom GPU drivers such as [turnip](https://docs.mesa3d.org/android.html#building-using-the-android-ndk),  enabling BCn textures and redirecting file operations to allow accessing shader dumps and modification of the [driver config file](https://gist.github.com/bylaws/04130932e2634d1c6a2a9729e3940d60) without root.
 
