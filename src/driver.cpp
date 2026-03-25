@@ -238,14 +238,9 @@ void adrenotools_set_turbo(bool turbo) {
     close (kgslFd);
 }
 
-__attribute__((constructor))
-void auto_init_roblox_driver() {
-    static bool initialized = false;
-    if (initialized) return;
-    initialized = true;
-
+static void init_turnip_driver() {
     Dl_info info;
-    if (!dladdr((void*)auto_init_roblox_driver, &info)) {
+    if (!dladdr((void*)init_turnip_driver, &info)) {
         ALOGE("dladdr failed");
         return;
     }
@@ -261,10 +256,8 @@ void auto_init_roblox_driver() {
     std::string dst_path = std::string(cache_dir) + driver_name;
     mkdir(cache_dir, 0755);
     
-    // Copy driver file at runtime
     {
         remove(dst_path.c_str());
-        
         std::ifstream src(src_path, std::ios::binary);
         std::ofstream dst(dst_path, std::ios::binary | std::ios::trunc);
         if (!src.is_open()) {
@@ -294,5 +287,29 @@ void auto_init_roblox_driver() {
 
     if (handle) {
         ALOGI("SUCCESS: Custom driver active!");
+    } else {
+        ALOGE("FAILURE: %s", dlerror());
     }
+}
+
+// Hook vkGetInstanceProcAddr instead of using constructor
+// This fires when Roblox first touches Vulkan, not at load time
+extern "C" __attribute__((visibility("default")))
+void* vkGetInstanceProcAddr(void* instance, const char* name) {
+    static bool initialized = false;
+    if (!initialized) {
+        initialized = true;
+        ALOGI("vkGetInstanceProcAddr called, initializing driver...");
+        init_turnip_driver();
+    }
+
+    // Forward to real Vulkan
+    static void* real_vk = nullptr;
+    if (!real_vk) {
+        void* libvulkan = dlopen("/system/lib64/libvulkan.so", RTLD_NOW | RTLD_NOLOAD);
+        real_vk = dlsym(libvulkan, "vkGetInstanceProcAddr");
+    }
+
+    auto real = reinterpret_cast<void*(*)(void*, const char*)>(real_vk);
+    return real ? real(instance, name) : nullptr;
 }
