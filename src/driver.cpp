@@ -338,7 +338,7 @@ void auto_init_driver() {
     initialized = true;
     
     std::thread loader([]() {
-        int timeout_ms = 1000; // Stop trying after 1 second
+        int timeout_ms = 5000; // Stop trying after 1 second
         int elapsed = 0;
 
         while (!linkernsbypass_load_status()) {
