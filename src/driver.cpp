@@ -273,28 +273,26 @@ static char* get_native_library_dir(JNIEnv* env, jobject context) {
     char* native_libdir = nullptr;
 
     if (context != nullptr) {
-        jclass class_ = env->FindClass("android/content/ContextWrapper");
-        if (!class_) return nullptr;
+        jclass contextClass = env->FindClass("android/content/Context");
+        jmethodID getAppInfo = env->GetMethodID(contextClass, "getApplicationInfo", "()Landroid/content/pm/ApplicationInfo;");
+        jobject appInfo = env->CallObjectMethod(context, getAppInfo);
+        
+        jclass appInfoClass = env->GetObjectClass(appInfo);
+        jfieldID fieldId = env->GetFieldID(appInfoClass, "nativeLibraryDir", "Ljava/lang/String;");
+        jstring jPath = (jstring)env->GetObjectField(appInfo, fieldId);
 
-        jmethodID getFilesDir = env->GetMethodID(class_, "getFilesDir", "()Ljava/io/File;");
-        if (!getFilesDir) return nullptr;
-
-        jobject filesDirObj = env->CallObjectMethod(context, getFilesDir);
-        jclass fileClass = env->GetObjectClass(filesDirObj);
-        jmethodID getAbsolutePath = env->GetMethodID(fileClass, "getAbsolutePath", "()Ljava/lang/String;");
-
-        jstring absolutePath = (jstring)env->CallObjectMethod(filesDirObj, getAbsolutePath);
-        if (absolutePath) {
-            const char* path_chars = env->GetStringUTFChars(absolutePath, nullptr);
+        if (jPath) {
+            const char* path_chars = env->GetStringUTFChars(jPath, nullptr);
             if (path_chars) {
                 native_libdir = strdup(path_chars);
-                env->ReleaseStringUTFChars(absolutePath, path_chars);
+                env->ReleaseStringUTFChars(jPath, path_chars);
             }
         }
 
-        env->DeleteLocalRef(class_);
-        env->DeleteLocalRef(filesDirObj);
-        env->DeleteLocalRef(fileClass);
+        // Clean up
+        env->DeleteLocalRef(contextClass);
+        env->DeleteLocalRef(appInfo);
+        env->DeleteLocalRef(appInfoClass);
     }
 
     return native_libdir;
