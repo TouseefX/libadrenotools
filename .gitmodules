@@ -2,3 +2,8 @@
 	path = lib/linkernsbypass
 	url = https://github.com/Pipetto-crypto/liblinkernsbypass.git
 	branch = master
+
+[submodule "lib/xhook"]
+    path = lib/xhook
+    url = https://github.com/hangedfish/xHook-cmake.git
+    branch = master
