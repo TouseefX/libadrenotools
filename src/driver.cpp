@@ -24,6 +24,7 @@
 #include <pwd.h>
 #include <cstring>
 #include <jni.h>
+#include <xhook.h> // placeholder
 
 #define ALOGI(...) __android_log_print(ANDROID_LOG_INFO, "AdrenoToolsPatch", __VA_ARGS__)
 #define ALOGW(...) __android_log_print(ANDROID_LOG_WARN, "AdrenoToolsPatch", __VA_ARGS__)
@@ -265,7 +266,8 @@ bool adrenotools_set_freedreno_env(const char *varName, const char *value) {
     }
 }
 
-static void* g_vulkan_handle = nullptr;
+static void *g_turnip_handle = NULL;
+static PFN_vkGetInstanceProcAddr g_turnip_gipa = NULL;
 static JavaVM* g_java_vm = nullptr;
 
 // Get native library directory via Context API (like GameNativePerformance)
@@ -327,67 +329,76 @@ static char* get_driver_path(JNIEnv* env, jobject context) {
     return driver_path;
 }
 
+// Hooked dlopen — intercept when the game opens libvulkan.so
+static void* hooked_dlopen(const char* filename, int flags) {
+    if (filename && strstr(filename, "libvulkan.so")) {
+        if (g_turnip_handle) {
+            ALOGI("Redirecting libvulkan.so dlopen to Turnip handle");
+            return g_turnip_handle;
+        }
+    }
+    return dlopen(filename, flags);  // original for everything else
+}
+
+// Hooked vkGetInstanceProcAddr — redirect to turnip's
+static PFN_vkVoidFunction hooked_vkGetInstanceProcAddr(VkInstance instance, const char* pName) {
+    if (g_turnip_gipa) {
+        return g_turnip_gipa(instance, pName);
+    }
+    // fallback to system
+    return vkGetInstanceProcAddr(instance, pName);
+}
+
 static void init_turnip_driver(JNIEnv* env, jobject context) {
-    ALOGI("Initializing Turnip Driver...");
+    char* driver_path = get_driver_path(env, context);
+    char* native_lib_dir = get_native_library_dir(env, context);
 
-    char* driver_path = nullptr;
-    char* native_lib_dir = nullptr;
-    char* tmpdir = nullptr;
-
-    uint32_t featureFlags = ADRENOTOOLS_DRIVER_CUSTOM | ADRENOTOOLS_DRIVER_FILE_REDIRECT;
-
-    // Get paths via Context API (more reliable than /data/data/)
-    driver_path = get_driver_path(env, context);
     if (!driver_path || access(driver_path, F_OK) != 0) {
-        ALOGE("Driver path not found or inaccessible: %s", driver_path ? driver_path : "NULL");
-        goto cleanup;
+        ALOGE("Driver path not found");
+        return;
     }
 
-    native_lib_dir = get_native_library_dir(env, context);
-    if (!native_lib_dir) {
-        ALOGE("Failed to get native library directory");
-        goto cleanup;
-    }
+    char tmpdir[512];
+    snprintf(tmpdir, sizeof(tmpdir), "%stemp/", driver_path);
+    mkdir(tmpdir, S_IRWXU | S_IRWXG);
 
-    // Create temp directory for adrenotools hooks (CRITICAL)
-    char tmpdir_buffer[512];
-    snprintf(tmpdir_buffer, sizeof(tmpdir_buffer), "%stemp/", driver_path);
-    mkdir(tmpdir_buffer, S_IRWXU | S_IRWXG);
-    chmod(tmpdir_buffer, 0777);
-    tmpdir = tmpdir_buffer;
-
-    ALOGI("Driver path: %s", driver_path);
-    ALOGI("Native lib dir: %s", native_lib_dir);
-    ALOGI("Temp dir: %s", tmpdir);
-
-    // Key: Don't manually set VK_ICD_FILENAMES or VK_DRIVER_FILES
-    // Let adrenotools handle this internally!
-    // Only set these if adrenotools doesn't set them properly:
-    setenv("MESA_LOADER_DRIVER_OVERRIDE", "turnip", 1);
-    setenv("TU_DEBUG", "sysmem", 1);
-    setenv("VK_LOADER_DEBUG", "all", 1);
-
-    // Open libvulkan with custom driver
-    g_vulkan_handle = adrenotools_open_libvulkan(
-        RTLD_GLOBAL | RTLD_NOW,              // dlopenMode
-        featureFlags,          // featureFlags
-        tmpdir,                             // tmpLibDir (CRITICAL for hooks)
-        native_lib_dir,                     // hookLibDir
-        driver_path,                        // customDriverDir
-        "libvulkan_freedreno.so",           // customDriverName
-        driver_path,                            // fileRedirectDir
-        nullptr                             // userMappingHandle
+    // Load Turnip via adrenotools — note RTLD_LOCAL, not GLOBAL
+    // and only ADRENOTOOLS_DRIVER_CUSTOM (like Winlator)
+    g_turnip_handle = adrenotools_open_libvulkan(
+        RTLD_NOW,
+        ADRENOTOOLS_DRIVER_CUSTOM,
+        tmpdir,
+        native_lib_dir,
+        driver_path,
+        "libvulkan_freedreno.so",
+        NULL,
+        NULL
     );
 
-    if (g_vulkan_handle) {
-        ALOGI("✓ Turnip driver successfully loaded!");
-    } else {
-        ALOGE("✗ Failed to load Turnip driver via adrenotools");
+    if (!g_turnip_handle) {
+        ALOGE("Failed to load Turnip via adrenotools");
+        goto cleanup;
+    }
+    
+    g_turnip_gipa = (PFN_vkGetInstanceProcAddr)dlsym(g_turnip_handle, "vkGetInstanceProcAddr");
+    if (!g_turnip_gipa) {
+        ALOGE("Failed to get vkGetInstanceProcAddr from Turnip");
+        goto cleanup;
     }
 
+    ALOGI("Turnip loaded, setting up hooks...");
+    
+    xhook_register(".*libUnity\\.so$", "dlopen", hooked_dlopen, NULL);
+    xhook_register(".*libUnity\\.so$", "vkGetInstanceProcAddr",
+                    hooked_vkGetInstanceProcAddr, NULL);
+    
+    xhook_refresh(0);
+
+    ALOGI("Turnip hooks installed");
+
 cleanup:
-    if (driver_path) free(driver_path);
-    if (native_lib_dir) free(native_lib_dir);
+    free(driver_path);
+    free(native_lib_dir);
 }
 
 extern "C" JNIEXPORT void JNICALL
