@@ -21,6 +21,7 @@
 #include <chrono>
 #include <pwd.h>
 #include <cstring>
+#include <jni.h>
 
 #define ALOGI(...) __android_log_print(ANDROID_LOG_INFO, "AdrenoToolsPatch", __VA_ARGS__)
 #define ALOGW(...) __android_log_print(ANDROID_LOG_WARN, "AdrenoToolsPatch", __VA_ARGS__)
