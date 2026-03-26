@@ -61,12 +61,12 @@ void *adrenotools_open_libvulkan(int dlopenFlags, int featureFlags, const char *
 
     if (featureFlags & ADRENOTOOLS_DRIVER_CUSTOM) {
         if (!customDriverName || !customDriverDir) {
-            ALOGW("WARN: ADRENOTOOLS_DRIVER_CUSTOM present but no custom driver name or folder parameter was specified\n");
+            ALOGE("FAILURE: ADRENOTOOLS_DRIVER_CUSTOM present but no custom driver name or folder parameter was specified\n");
             return nullptr;
         }
 
         if (stat((std::string(customDriverDir) + customDriverName).c_str(), &buf) != 0) {
-            ALOGW("WARN: ADRENOTOOLS_DRIVER_CUSTOM present but importable driver doesn't exist\n");
+            ALOGE("FAILURE: ADRENOTOOLS_DRIVER_CUSTOM present but importable driver doesn't exist\n");
             return nullptr;
         }
     }
@@ -74,12 +74,12 @@ void *adrenotools_open_libvulkan(int dlopenFlags, int featureFlags, const char *
     // Verify that params for enabled features are correct
     if (featureFlags & ADRENOTOOLS_DRIVER_FILE_REDIRECT) {
         if (!fileRedirectDir) {
-            ALOGW("WARN: ADRENOTOOLS_DRIVER_REDIRECT_DIR present but no folder parameter was found\n");
+            ALOGE("FAILURE: ADRENOTOOLS_DRIVER_REDIRECT_DIR present but no folder parameter was found\n");
             return nullptr;
         }
 
         if (stat(fileRedirectDir, &buf) != 0) {
-            ALOGW("WARN: ADRENOTOOLS_DRIVER_REDIRECT_DIR present but specified redirect folder doesn't exist\n");
+            ALOGE("FAILURE: ADRENOTOOLS_DRIVER_REDIRECT_DIR present but specified redirect folder doesn't exist\n");
             return nullptr;
         }
     }
@@ -305,26 +305,25 @@ static char* get_driver_path(JNIEnv* env, jobject context) {
     char* driver_path = nullptr;
 
     if (context != nullptr) {
-        jclass contextClass = env->FindClass("android/content/Context");
-        jmethodID getAppInfo = env->GetMethodID(contextClass, "getApplicationInfo", "()Landroid/content/pm/ApplicationInfo;");
-        jobject appInfo = env->CallObjectMethod(context, getAppInfo);
-        
-        jclass appInfoClass = env->GetObjectClass(appInfo);
-        jfieldID nativeLibraryDirField = env->GetFieldID(appInfoClass, "nativeLibraryDir", "Ljava/lang/String;");
-        jstring nativeLibraryDir = (jstring)env->GetObjectField(appInfo, nativeLibraryDirField);
+        jclass class_ = env->FindClass("android/content/ContextWrapper");
+        if (!class_) return nullptr;
 
-        if (nativeLibraryDir) {
-            const char* path_chars = env->GetStringUTFChars(nativeLibraryDir, nullptr);
+        jmethodID getFilesDir = env->GetMethodID(class_, "getFilesDir", "()Ljava/io/File;");
+        jobject filesDirObj = env->CallObjectMethod(context, getFilesDir);
+        jclass fileClass = env->GetObjectClass(filesDirObj);
+        jmethodID getAbsolutePath = env->GetMethodID(fileClass, "getAbsolutePath", "()Ljava/lang/String;");
+
+        jstring absolutePath = (jstring)env->CallObjectMethod(filesDirObj, getAbsolutePath);
+        if (absolutePath) {
+            const char* path_chars = env->GetStringUTFChars(absolutePath, nullptr);
             if (path_chars) {
-                driver_path = strdup(path_chars);
-                env->ReleaseStringUTFChars(nativeLibraryDir, path_chars);
+                if (asprintf(&driver_path, "%s/turnip/", path_chars) == -1)
+                    driver_path = nullptr;
+                env->ReleaseStringUTFChars(absolutePath, path_chars);
             }
         }
-        
-        // Clean up local references
-        env->DeleteLocalRef(contextClass);
-        env->DeleteLocalRef(appInfo);
-        env->DeleteLocalRef(appInfoClass);
+
+        env->DeleteLocalRef(class_);
     }
 
     return driver_path;
