@@ -339,7 +339,7 @@ static void init_turnip_driver() {
     
     void* handle = adrenotools_open_libvulkan(
        RTLD_NOW,                 // dlopenMode
-       ADRENOTOOLS_DRIVER_CUSTOM | 0x4, // featureFlags
+       ADRENOTOOLS_DRIVER_CUSTOM, // featureFlags
        cache_dir.c_str(),        // tmpLibDir (CRITICAL: needs a writable path for hooks)
        hook_lib_dir.c_str(),     // hookLibDir
        cache_dir.c_str(),        // customDriverDir (where you copied Turnip)
