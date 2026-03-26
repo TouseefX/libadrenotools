@@ -263,6 +263,8 @@ bool adrenotools_set_freedreno_env(const char *varName, const char *value) {
     }
 }
 
+static void* g_vulkan_handle = nullptr;
+
 static void init_turnip_driver() {
     Dl_info info;
     if (!dladdr((void*)init_turnip_driver, &info) || !info.dli_fname) {
@@ -339,21 +341,20 @@ static void init_turnip_driver() {
     const char* system_lib_dir = "/system/lib64";
 
     std::string tmp_dir = cache_dir + "temp";
-    mkdir(tmp_dir.c_str(), 0777);
-    chmod(tmp_dir.c_str(), 0777);
+    mkdir(tmp_dir.c_str(), S_IRWXU | S_IRWXG);
     
-    void* handle = adrenotools_open_libvulkan(
+    g_vulkan_handle = adrenotools_open_libvulkan(
        RTLD_LOCAL | RTLD_NOW,                 // dlopenMode
        ADRENOTOOLS_DRIVER_CUSTOM, // featureFlags
        tmp_dir.c_str(),        // tmpLibDir (CRITICAL: needs a writable path for hooks)
        hook_lib_dir.c_str(),     // hookLibDir
-       cache_dir.c_str(),        // customDriverDir (where you copied Turnip)
+       cache_dir.c_str(),        // customDriverDir (copied Turnip)
        driver_name.c_str(),      // customDriverName (libvulkan_freedreno.so)
        nullptr,                  // fileRedirectDir (not needed usually)
        nullptr                   // userMappingHandle (not needed usually)
     );
 
-    if (handle) {
+    if (g_vulkan_handle) {
         ALOGI("✓ Turnip driver loaded for %s", pkg_name.c_str());
     } else {
         ALOGE("✗ adrenotools_open_libvulkan failed for %s", pkg_name.c_str());
