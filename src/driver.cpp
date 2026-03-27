@@ -400,9 +400,9 @@ static void init_turnip_driver(JNIEnv* env, jobject context) {
 
     ALOGI("Turnip loaded, setting up hooks...");
     
-    xhook_register(".*\\.so$", "dlopen", hooked_dlopen, NULL);
+    xhook_register(".*\\.so$", "dlopen", (void*)hooked_dlopen, NULL);
     xhook_register(".*\\.so$", "vkGetInstanceProcAddr",
-                    hooked_vkGetInstanceProcAddr, NULL);
+                    (void*)hooked_vkGetInstanceProcAddr, NULL);
     xhook_register(".*\\.so$", "vkCreateInstance", (void*)hooked_vkGetInstanceProcAddr(NULL, "vkCreateInstance"), NULL);
     xhook_register(".*\\.so$", "vkEnumeratePhysicalDevices", (void*)hooked_vkEnumeratePhysicalDevices, NULL);
     xhook_register(".*\\.so$", "vkGetDeviceProcAddr", (void*)hooked_vkGetDeviceProcAddr, NULL);
