@@ -29,6 +29,21 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     target_compile_options(shadowhook PRIVATE -Wno-error=unsafe-buffer-usage -Wno-unsafe-buffer-usage)
 endif()
 
+if(TARGET shadowhook)
+    target_compile_options(shadowhook PRIVATE 
+        -Wno-error=declaration-after-statement
+        -Wno-declaration-after-statement
+        -Wno-error=unsafe-buffer-usage
+        -Wno-unsafe-buffer-usage
+    )
+    
+    # Force C99 only for ShadowHook's C files
+    set_target_properties(shadowhook PROPERTIES 
+        C_STANDARD 99
+        C_STANDARD_REQUIRED ON
+    )
+endif()
+
 add_subdirectory(src/hook)
 
 if (${GEN_INSTALL_TARGET})
