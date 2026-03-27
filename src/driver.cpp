@@ -24,7 +24,8 @@
 #include <pwd.h>
 #include <cstring>
 #include <jni.h>
-#include <xhook.h> // placeholder
+#include <xhook.h>
+#include <dobby.h>
 
 #define ALOGI(...) __android_log_print(ANDROID_LOG_INFO, "AdrenoToolsPatch", __VA_ARGS__)
 #define ALOGW(...) __android_log_print(ANDROID_LOG_WARN, "AdrenoToolsPatch", __VA_ARGS__)
@@ -268,6 +269,8 @@ bool adrenotools_set_freedreno_env(const char *varName, const char *value) {
 
 static void *g_turnip_handle = NULL;
 static PFN_vkGetInstanceProcAddr g_turnip_gipa = NULL;
+static PFN_vkGetInstanceProcAddr orig_system_gipa = nullptr;
+static void* (*orig_dlopen)(const char*, int) = nullptr;
 static JavaVM* g_java_vm = nullptr;
 
 // Get native library directory via Context API (like GameNativePerformance)
@@ -337,31 +340,22 @@ static void* get_system_vulkan_func(const char* name) {
     return dlsym(system_vulkan, name);
 }
 
-// Hooked dlopen — intercept when the game opens libvulkan.so
 static void* hooked_dlopen(const char* filename, int flags) {
-    if (filename) {
-        // Log exactly what app is asking for debugging
-        ALOGI("App is opening: %s", filename);
-
-        if (strstr(filename, "vulkan") || strstr(filename, "adreno")) {
-            if (g_turnip_handle) {
-                ALOGI("FORCING Turnip for: %s", filename);
-                return g_turnip_handle;
-            }
+    if (filename && (strstr(filename, "libvulkan") || strstr(filename, "vulkan"))) {
+        if (g_turnip_handle) {
+            ALOGI("Redirecting dlopen(%s) to Turnip", filename);
+            return g_turnip_handle;
         }
     }
-    return dlopen(filename, flags);
+    return orig_dlopen(filename, flags);
 }
 
 // Hooked vkGetInstanceProcAddr — redirect to turnip's
 static PFN_vkVoidFunction hooked_vkGetInstanceProcAddr(VkInstance instance, const char* pName) {
     if (g_turnip_gipa) {
-        ALOGI("GIPA Hooked!");
         return g_turnip_gipa(instance, pName);
     }
-    // fallback to system
-    auto sys_gipa = (PFN_vkGetInstanceProcAddr)get_system_vulkan_func("vkGetInstanceProcAddr");
-    return sys_gipa ? sys_gipa(instance, pName) : nullptr;
+    return orig_system_gipa ? orig_system_gipa(instance, pName) : nullptr;
 }
 
 static PFN_vkVoidFunction hooked_vkGetDeviceProcAddr(VkDevice device, const char* pName) {
@@ -383,6 +377,27 @@ static VKAPI_ATTR VkResult VKAPI_CALL hooked_vkEnumeratePhysicalDevices(VkInstan
         if (func) return func(instance, pPhysicalDeviceCount, pPhysicalDevices);
     }
     return VK_SUCCESS;
+}
+
+static void install_hooks() {
+    // Hook libvulkan.so's vkGetInstanceProcAddr inline
+    void* libvulkan = dlopen("libvulkan.so", RTLD_NOW | RTLD_NOLOAD);
+    if (libvulkan) {
+        void* gipa_addr = dlsym(libvulkan, "vkGetInstanceProcAddr");
+        if (gipa_addr) {
+            DobbyHook(gipa_addr, (void*)hooked_vkGetInstanceProcAddr, (void**)&orig_system_gipa);
+            ALOGI("Hooked vkGetInstanceProcAddr in libvulkan.so");
+        } else {
+            ALOGE("Failed to find vkGetInstanceProcAddr in libvulkan.so");
+        }
+    }
+
+    // Hook dlopen at the libdl level
+    void* dlopen_addr = dlsym(RTLD_DEFAULT, "dlopen");
+    if (dlopen_addr) {
+        DobbyHook(dlopen_addr, (void*)hooked_dlopen, (void**)&orig_dlopen);
+        ALOGI("Hooked dlopen");
+    }
 }
 
 static void init_turnip_driver(JNIEnv* env, jobject context) {
@@ -429,7 +444,6 @@ static void init_turnip_driver(JNIEnv* env, jobject context) {
 
     ALOGI("Turnip loaded, setting up hooks...");
     
-    xhook_register(target_libs, "dlopen", (void*)hooked_dlopen, NULL);
     xhook_register(target_libs, "vkGetInstanceProcAddr", (void*)hooked_vkGetInstanceProcAddr, NULL);
     xhook_register(target_libs, "vkGetDeviceProcAddr", (void*)hooked_vkGetDeviceProcAddr, NULL);
     xhook_register(target_libs, "vkCreateInstance", (void*)hooked_vkCreateInstance, NULL);
