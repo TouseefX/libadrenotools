@@ -356,6 +356,7 @@ static void* hooked_dlopen(const char* filename, int flags) {
 // Hooked vkGetInstanceProcAddr — redirect to turnip's
 static PFN_vkVoidFunction hooked_vkGetInstanceProcAddr(VkInstance instance, const char* pName) {
     if (g_turnip_gipa) {
+        ALOGI("GIPA Hooked!")
         return g_turnip_gipa(instance, pName);
     }
     // fallback to system
