@@ -37,6 +37,8 @@ if(TARGET shadowhook)
         -Wno-unsafe-buffer-usage
 		-Wno-error=reserved-identifier
         -Wno-reserved-identifier
+		-Wno-unused-macros
+        -Wno-error=unused-macros
     )
     
     # Force C99 only for ShadowHook's C files
