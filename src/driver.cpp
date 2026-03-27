@@ -388,7 +388,7 @@ static void init_turnip_driver(JNIEnv* env, jobject context) {
     // Load Turnip via adrenotools — note RTLD_LOCAL, not GLOBAL
     // and only ADRENOTOOLS_DRIVER_CUSTOM (like Winlator)
     g_turnip_handle = adrenotools_open_libvulkan(
-        RTLD_NOW,
+        RTLD_LOCAL | RTLD_NOW,
         ADRENOTOOLS_DRIVER_CUSTOM,
         tmpdir,
         native_lib_dir,
