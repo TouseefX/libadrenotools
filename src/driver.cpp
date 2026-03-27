@@ -30,11 +30,6 @@
 #define ALOGW(...) __android_log_print(ANDROID_LOG_WARN, "AdrenoToolsPatch", __VA_ARGS__)
 #define ALOGE(...) __android_log_print(ANDROID_LOG_ERROR, "AdrenoToolsPatch", __VA_ARGS__)
 
-if (shadowhook_init(SHADOWHOOK_MODE_UNIQUE, true) != 0) {
-        ALOGE("ShadowHook init failed");
-        return;
-}
-
 void *adrenotools_open_libvulkan(int dlopenFlags, int featureFlags, const char *tmpLibDir, const char *hookLibDir, const char *customDriverDir, const char *customDriverName, const char *fileRedirectDir, void **userMappingHandle) {
     // Bail out if linkernsbypass failed to load, this probably means we're on api < 28
     if (!linkernsbypass_load_status()) {
@@ -378,6 +373,11 @@ static void init_turnip_driver(JNIEnv* env, jobject context) {
 
     setenv("TU_DEBUG", "sysmem", 1);
     setenv("MESA_VK_IGNORE_CONFORMANCE_WARNING", "true", 1);
+
+    if (shadowhook_init(SHADOWHOOK_MODE_UNIQUE, true) != 0) {
+         ALOGE("ShadowHook init failed");
+         return;
+    }
 
     // Load Turnip via adrenotools — note RTLD_LOCAL, not GLOBAL
     // and only ADRENOTOOLS_DRIVER_CUSTOM (like Winlator)
