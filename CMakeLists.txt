@@ -9,7 +9,8 @@ project(adrenotools LANGUAGES CXX C)
 set(GEN_INSTALL_TARGET OFF CACHE BOOL "")
 
 add_subdirectory(lib/linkernsbypass)
-add_subdirectory(lib/ShadowHook/shadowhook)
+
+include(lib/ShadowHook/shadowhook/local_dependency.cmake)
 
 set(LIB_SOURCES src/bcenabler.cpp
                 src/driver.cpp
