@@ -24,11 +24,13 @@
 #include <pwd.h>
 #include <cstring>
 #include <jni.h>
-#include <xhook.h> // placeholder
+#include <shadowhook.h>
 
 #define ALOGI(...) __android_log_print(ANDROID_LOG_INFO, "AdrenoToolsPatch", __VA_ARGS__)
 #define ALOGW(...) __android_log_print(ANDROID_LOG_WARN, "AdrenoToolsPatch", __VA_ARGS__)
 #define ALOGE(...) __android_log_print(ANDROID_LOG_ERROR, "AdrenoToolsPatch", __VA_ARGS__)
+
+shadowhook_init(SHADOWHOOK_MODE_UNIQUE, true);
 
 void *adrenotools_open_libvulkan(int dlopenFlags, int featureFlags, const char *tmpLibDir, const char *hookLibDir, const char *customDriverDir, const char *customDriverName, const char *fileRedirectDir, void **userMappingHandle) {
     // Bail out if linkernsbypass failed to load, this probably means we're on api < 28
