@@ -9,7 +9,7 @@ project(adrenotools LANGUAGES CXX C)
 set(GEN_INSTALL_TARGET OFF CACHE BOOL "")
 
 add_subdirectory(lib/linkernsbypass)
-add_subdirectory(lib/xhook)
+add_subdirectory(lib/xhook/jni xhook_build)
 
 set(LIB_SOURCES src/bcenabler.cpp
                 src/driver.cpp
