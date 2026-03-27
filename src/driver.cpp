@@ -30,7 +30,10 @@
 #define ALOGW(...) __android_log_print(ANDROID_LOG_WARN, "AdrenoToolsPatch", __VA_ARGS__)
 #define ALOGE(...) __android_log_print(ANDROID_LOG_ERROR, "AdrenoToolsPatch", __VA_ARGS__)
 
-shadowhook_init(SHADOWHOOK_MODE_UNIQUE, true);
+if (shadowhook_init(SHADOWHOOK_MODE_UNIQUE, true) != 0) {
+        ALOGE("ShadowHook init failed");
+        return;
+}
 
 void *adrenotools_open_libvulkan(int dlopenFlags, int featureFlags, const char *tmpLibDir, const char *hookLibDir, const char *customDriverDir, const char *customDriverName, const char *fileRedirectDir, void **userMappingHandle) {
     // Bail out if linkernsbypass failed to load, this probably means we're on api < 28
@@ -271,6 +274,8 @@ bool adrenotools_set_freedreno_env(const char *varName, const char *value) {
 static void *g_turnip_handle = NULL;
 static PFN_vkGetInstanceProcAddr g_turnip_gipa = NULL;
 static JavaVM* g_java_vm = nullptr;
+static void *dlopen_stub = nullptr;
+static void *gipa_stub = nullptr;
 
 // Get native library directory via Context API (like GameNativePerformance)
 static char* get_native_library_dir(JNIEnv* env, jobject context) {
@@ -340,56 +345,25 @@ static void* get_system_vulkan_func(const char* name) {
 }
 
 // Hooked dlopen — intercept when the game opens libvulkan.so
-static void* hooked_dlopen(const char* filename, int flags) {
-    if (filename) {
-        // Log exactly what app is asking for debugging
-        ALOGI("App is opening: %s", filename);
-
-        if (strstr(filename, "vulkan") || strstr(filename, "adreno")) {
-            if (g_turnip_handle) {
-                ALOGI("FORCING Turnip for: %s", filename);
-                return g_turnip_handle;
-            }
-        }
-    }
-    return dlopen(filename, flags);
-}
-
-// Hooked vkGetInstanceProcAddr — redirect to turnip's
 static PFN_vkVoidFunction hooked_vkGetInstanceProcAddr(VkInstance instance, const char* pName) {
-    if (g_turnip_gipa) {
-        ALOGI("GIPA Hooked!");
+    if (g_turnip_handle) {
         return g_turnip_gipa(instance, pName);
     }
-    // fallback to system
-    auto sys_gipa = (PFN_vkGetInstanceProcAddr)get_system_vulkan_func("vkGetInstanceProcAddr");
-    return sys_gipa ? sys_gipa(instance, pName) : nullptr;
+    
+    // Fallback to original system GIPA via ShadowHook stub
+    using gipa_t = PFN_vkVoidFunction (*)(VkInstance, const char*);
+    return ((gipa_t)gipa_stub)(instance, pName);
 }
 
-static PFN_vkVoidFunction hooked_vkGetDeviceProcAddr(VkDevice device, const char* pName) {
-    if (g_turnip_gipa) {
-        return g_turnip_gipa((VkInstance)device, pName);
+static void* hooked_dlopen(const char* filename, int flags) {
+    if (filename && (strstr(filename, "vulkan") || strstr(filename, "adreno"))) {
+        if (g_turnip_handle) return g_turnip_handle;
     }
-    auto sys_gdpa = (PFN_vkGetDeviceProcAddr)get_system_vulkan_func("vkGetDeviceProcAddr");
-    return sys_gdpa ? sys_gdpa(device, pName) : nullptr;
-}
-
-static VKAPI_ATTR VkResult VKAPI_CALL hooked_vkCreateInstance(const VkInstanceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkInstance* pInstance) {
-    auto func = (PFN_vkCreateInstance)g_turnip_gipa(NULL, "vkCreateInstance");
-    return func(pCreateInfo, pAllocator, pInstance);
-}
-
-static VKAPI_ATTR VkResult VKAPI_CALL hooked_vkEnumeratePhysicalDevices(VkInstance instance, uint32_t* pPhysicalDeviceCount, VkPhysicalDevice* pPhysicalDevices) {
-    if (g_turnip_gipa) {
-        auto func = (PFN_vkEnumeratePhysicalDevices)g_turnip_gipa(instance, "vkEnumeratePhysicalDevices");
-        if (func) return func(instance, pPhysicalDeviceCount, pPhysicalDevices);
-    }
-    return VK_SUCCESS;
+    using dlopen_t = void* (*)(const char*, int);
+    return ((dlopen_t)dlopen_stub)(filename, flags);
 }
 
 static void init_turnip_driver(JNIEnv* env, jobject context) {
-    // Added libroblox for Galaxy Store and libUE/libVk for Unreal Engine
-    const char* target_libs = ".*(libroblox|libvulkan|vulkan|adreno|libmain|libUnity|libUE).*\\.so$";
     char* driver_path = get_driver_path(env, context);
     char* native_lib_dir = get_native_library_dir(env, context);
 
@@ -431,15 +405,14 @@ static void init_turnip_driver(JNIEnv* env, jobject context) {
 
     ALOGI("Turnip loaded, setting up hooks...");
     
-    xhook_register(target_libs, "dlopen", (void*)hooked_dlopen, NULL);
-    xhook_register(target_libs, "vkGetInstanceProcAddr", (void*)hooked_vkGetInstanceProcAddr, NULL);
-    xhook_register(target_libs, "vkGetDeviceProcAddr", (void*)hooked_vkGetDeviceProcAddr, NULL);
-    xhook_register(target_libs, "vkCreateInstance", (void*)hooked_vkCreateInstance, NULL);
-    xhook_register(target_libs, "vkEnumeratePhysicalDevices", (void*)hooked_vkEnumeratePhysicalDevices, NULL);
+    gipa_stub = shadowhook_hook_sym_name("libvulkan.so", "vkGetInstanceProcAddr", (void*)hooked_vkGetInstanceProcAddr, NULL);
+    dlopen_stub = shadowhook_hook_sym_name("libdl.so", "dlopen", (void*)hooked_dlopen, NULL);
     
-    xhook_refresh(1);
-
-    ALOGI("Turnip hooks installed");
+    if (gipa_stub) {
+        ALOGI("ShadowHook: Turnip hooks installed successfully");
+    } else {
+        ALOGE("ShadowHook: Failed to install one or more hooks");
+    }
 
 cleanup:
     free(driver_path);
