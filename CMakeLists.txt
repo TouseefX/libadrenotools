@@ -40,6 +40,8 @@ if(TARGET shadowhook)
 		-Wno-unused-macros
         -Wno-error=unused-macros
     )
+
+	target_link_options(shadowhook PRIVATE "-Wl,--undefined-version")
     
     # Force C99 only for ShadowHook's C files
     set_target_properties(shadowhook PROPERTIES 
