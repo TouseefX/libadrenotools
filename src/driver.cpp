@@ -329,15 +329,23 @@ static char* get_driver_path(JNIEnv* env, jobject context) {
     return driver_path;
 }
 
+static void* get_system_vulkan_func(const char* name) {
+    static void* system_vulkan = dlopen("libvulkan.so", RTLD_NOW);
+    if (!system_vulkan) return nullptr;
+    return dlsym(system_vulkan, name);
+}
+
 // Hooked dlopen — intercept when the game opens libvulkan.so
 static void* hooked_dlopen(const char* filename, int flags) {
-    if (filename && strstr(filename, "vulkan.adreno.so")) {
-        if (g_turnip_handle) {
-            ALOGI("Redirecting libvulkan.so dlopen to Turnip handle");
-            return g_turnip_handle;
+    if (filename) {
+        if (strstr(filename, "libvulkan.so") || strstr(filename, "vulkan.adreno.so")) {
+            if (g_turnip_handle) {
+                ALOGI("Redirecting %s dlopen to Turnip handle", filename);
+                return g_turnip_handle;
+            }
         }
     }
-    return dlopen(filename, flags);  // original for everything else
+    return dlopen(filename, flags); 
 }
 
 // Hooked vkGetInstanceProcAddr — redirect to turnip's
@@ -346,7 +354,8 @@ static PFN_vkVoidFunction hooked_vkGetInstanceProcAddr(VkInstance instance, cons
         return g_turnip_gipa(instance, pName);
     }
     // fallback to system
-    return vkGetInstanceProcAddr(instance, pName);
+    auto sys_gipa = (PFN_vkGetInstanceProcAddr)get_system_vulkan_func("vkGetInstanceProcAddr");
+    return sys_gipa ? sys_gipa(instance, pName) : nullptr;
 }
 
 static VKAPI_ATTR VkResult VKAPI_CALL hooked_vkEnumeratePhysicalDevices(VkInstance instance, uint32_t* pPhysicalDeviceCount, VkPhysicalDevice* pPhysicalDevices) {
@@ -358,7 +367,9 @@ static PFN_vkVoidFunction hooked_vkGetDeviceProcAddr(VkDevice device, const char
     if (g_turnip_gipa) {
         return g_turnip_gipa((VkInstance)device, pName);
     }
-    return vkGetDeviceProcAddr(device, pName);
+    
+    auto sys_gdpa = (PFN_vkGetDeviceProcAddr)get_system_vulkan_func("vkGetDeviceProcAddr");
+    return sys_gdpa ? sys_gdpa(device, pName) : nullptr;
 }
 
 static void init_turnip_driver(JNIEnv* env, jobject context) {
