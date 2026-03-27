@@ -9,8 +9,7 @@ project(adrenotools LANGUAGES CXX C)
 set(GEN_INSTALL_TARGET OFF CACHE BOOL "")
 
 add_subdirectory(lib/linkernsbypass)
-
-include(lib/ShadowHook/shadowhook/local_dependency.cmake)
+add_subdirectory(lib/ShadowHook/shadowhook/src/main/cpp shadowhook_build)
 
 set(LIB_SOURCES src/bcenabler.cpp
                 src/driver.cpp
@@ -22,7 +21,7 @@ add_library(adrenotools ${LIB_SOURCES})
 
 target_include_directories(adrenotools PUBLIC include)
 target_include_directories(adrenotools PRIVATE .)
-target_include_directories(adrenotools PRIVATE lib/ShadowHook/shadowhook/src/main/cpp)
+target_include_directories(adrenotools PRIVATE lib/ShadowHook/shadowhook/src/main/cpp/include)
 target_compile_options(adrenotools PRIVATE -Wall -Wextra)
 target_link_libraries(adrenotools android -Wl,--whole-archive linkernsbypass -Wl,--no-whole-archive shadowhook log)
 
