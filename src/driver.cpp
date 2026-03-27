@@ -340,14 +340,17 @@ static void* get_system_vulkan_func(const char* name) {
 // Hooked dlopen — intercept when the game opens libvulkan.so
 static void* hooked_dlopen(const char* filename, int flags) {
     if (filename) {
-        if (strstr(filename, "libvulkan.so") || strstr(filename, "vulkan.adreno.so")) {
+        // Log exactly what app is asking for debugging
+        ALOGI("App is opening: %s", filename);
+
+        if (strstr(filename, "vulkan") || strstr(filename, "adreno")) {
             if (g_turnip_handle) {
-                ALOGI("Redirecting %s dlopen to Turnip handle", filename);
+                ALOGI("FORCING Turnip for: %s", filename);
                 return g_turnip_handle;
             }
         }
     }
-    return dlopen(filename, flags); 
+    return dlopen(filename, flags);
 }
 
 // Hooked vkGetInstanceProcAddr — redirect to turnip's
@@ -383,7 +386,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL hooked_vkEnumeratePhysicalDevices(VkInstan
 
 static void init_turnip_driver(JNIEnv* env, jobject context) {
     // Added libroblox for Galaxy Store and libUE/libVk for Unreal Engine
-    const char* target_libs = ".*(libroblox|libUnity|libmain|libUE4|libUE5|libVkLayer|librender).*\\.so$";
+    const char* target_libs = ".*(libroblox|libUnity|libmain|libUE4|libUE5|libvulkan|vulkan|adreno).*\\.so$";
     char* driver_path = get_driver_path(env, context);
     char* native_lib_dir = get_native_library_dir(env, context);
 
