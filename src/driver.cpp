@@ -386,6 +386,9 @@ static void init_turnip_driver(JNIEnv* env, jobject context) {
     snprintf(tmpdir, sizeof(tmpdir), "%stemp/", driver_path);
     mkdir(tmpdir, S_IRWXU | S_IRWXG);
 
+    setenv("TU_DEBUG", "sysmem", 1);
+    setenv("MESA_VK_IGNORE_CONFORMANCE_WARNING", "true", 1);
+
     // Load Turnip via adrenotools — note RTLD_LOCAL, not GLOBAL
     // and only ADRENOTOOLS_DRIVER_CUSTOM (like Winlator)
     g_turnip_handle = adrenotools_open_libvulkan(
