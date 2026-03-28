@@ -213,7 +213,6 @@ err:
     return false;
 }
 
-
 bool adrenotools_mem_cpu_map(void *handle, void *hostPtr, uint64_t size) {
     auto mapping{reinterpret_cast<adrenotools_gpu_mapping *>(handle)};
 
@@ -355,14 +354,6 @@ static PFN_vkVoidFunction hooked_vkGetDeviceProcAddr(VkDevice device, const char
         return ((gdpa_t)gdpa_stub)(device, pName);
     }
     return nullptr;
-}
-
-static void* hooked_dlopen(const char* filename, int flags) {
-    if (filename && (strstr(filename, "vulkan") || strstr(filename, "adreno"))) {
-        if (g_turnip_handle) return g_turnip_handle;
-    }
-    using dlopen_t = void* (*)(const char*, int);
-    return ((dlopen_t)dlopen_stub)(filename, flags);
 }
 
 static void init_turnip_driver(JNIEnv* env, jobject context) {
