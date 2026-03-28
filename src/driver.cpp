@@ -428,7 +428,7 @@ JNI_OnLoad(JavaVM* vm, void* reserved) {
     ALOGI("JNI_OnLoad called");
     g_java_vm = vm;
     
-    shadowhook_init(SHADOWHOOK_MODE_UNIQUE, true)
+    shadowhook_init(SHADOWHOOK_MODE_UNIQUE, true);
     
     return JNI_VERSION_1_6;
 }
