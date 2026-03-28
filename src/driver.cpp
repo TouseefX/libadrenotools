@@ -271,6 +271,7 @@ static PFN_vkGetInstanceProcAddr g_turnip_gipa = NULL;
 static JavaVM* g_java_vm = nullptr;
 static void *dlopen_stub = nullptr;
 static void *gipa_stub = nullptr;
+static void* gdpa_stub = nullptr;
 
 // Get native library directory via Context API (like GameNativePerformance)
 static char* get_native_library_dir(JNIEnv* env, jobject context) {
@@ -341,13 +342,28 @@ static void* get_system_vulkan_func(const char* name) {
 
 // Hooked dlopen — intercept when the game opens libvulkan.so
 static PFN_vkVoidFunction hooked_vkGetInstanceProcAddr(VkInstance instance, const char* pName) {
-    if (g_turnip_handle) {
-        return g_turnip_gipa(instance, pName);
+    if (g_turnip_gipa) {
+        auto func = g_turnip_gipa(instance, pName);
+        if (func) return func;
     }
     
-    // Fallback to original system GIPA via ShadowHook stub
-    using gipa_t = PFN_vkVoidFunction (*)(VkInstance, const char*);
-    return ((gipa_t)gipa_stub)(instance, pName);
+    if (gipa_stub) {
+        return ((PFN_vkVoidFunction (*)(VkInstance, const char*))gipa_stub)(instance, pName);
+    }
+    return nullptr;
+}
+
+static PFN_vkVoidFunction hooked_vkGetDeviceProcAddr(VkDevice device, const char* pName) {
+    if (g_turnip_gipa) {
+        auto func = g_turnip_gipa((VkInstance)device, pName);
+        if (func) return func;
+    }
+    
+    if (gdpa_stub) {
+        typedef PFN_vkVoidFunction (*gdpa_t)(VkDevice, const char*);
+        return ((gdpa_t)gdpa_stub)(device, pName);
+    }
+    return nullptr;
 }
 
 static void* hooked_dlopen(const char* filename, int flags) {
@@ -400,8 +416,9 @@ static void init_turnip_driver(JNIEnv* env, jobject context) {
 
     ALOGI("Turnip loaded, setting up hooks...");
     
-    dlopen_stub = shadowhook_hook_sym_name("libdl.so", "dlopen", (void*)hooked_dlopen, NULL);
+    // dlopen_stub = shadowhook_hook_sym_name("libdl.so", "dlopen", (void*)hooked_dlopen, NULL);
     gipa_stub = shadowhook_hook_sym_name("libvulkan.so", "vkGetInstanceProcAddr", (void*)hooked_vkGetInstanceProcAddr, NULL);
+    gdpa_stub = shadowhook_hook_sym_name("libvulkan.so", "vkGetDeviceProcAddr", (void*)hooked_vkGetDeviceProcAddr, NULL);
     
     if (gipa_stub) {
         ALOGI("ShadowHook: Turnip hooks installed successfully");
@@ -428,7 +445,7 @@ JNI_OnLoad(JavaVM* vm, void* reserved) {
     ALOGI("JNI_OnLoad called");
     g_java_vm = vm;
     
-    shadowhook_init(SHADOWHOOK_MODE_UNIQUE, false);
+    shadowhook_init(SHADOWHOOK_MODE_UNIQUE, true);
     
     return JNI_VERSION_1_6;
 }
