@@ -2,7 +2,7 @@ Forked Verison of libanderotools design to run on native Android apps
 
 credits to Pipetto-crypto for fixes and patches
 
-Credits To gamenative performance for loading some fixes
+Credits To gamenative performance/WinNative source code for loading and some fixes
 
 Credits To MrPurple for env loader
 
