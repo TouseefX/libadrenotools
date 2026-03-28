@@ -16,9 +16,11 @@ A library for applying rootless Adreno GPU driver modifications/replacements. Cu
 #### Documentation
 API is documented in the `include/adrenotools` headers.
 
-#### Support
+#### Support and Requirements
 Android 10+
 Arm64
+Vulkan 1.3+
+Snapdragon 865+
 
 Please create an issue if support for anything else is desired.
 
@@ -40,3 +42,5 @@ Each individual app must explicitly make use of libadrenotools in order to load 
 See previous question. It's up to the game developer to add support & use this library.
 
 You could contact them to so they add support for it; but that's out of our power.
+
+i don't know, if im allowed to put a patching guide here, but you can also do it on android without root
