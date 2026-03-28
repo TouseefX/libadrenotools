@@ -369,9 +369,12 @@ static void init_turnip_driver(JNIEnv* env, jobject context) {
     snprintf(tmpdir, sizeof(tmpdir), "%stemp/", driver_path);
     mkdir(tmpdir, S_IRWXU | S_IRWXG);
 
-    setenv("TU_DEBUG", "sysmem", 1);
+    setenv("MESA_LOADER_DRIVER_OVERRIDE", "zink", 1); // Only if using Zink
+    setenv("TU_DEBUG", "sysmem", 1);                 // Use sysmem to avoid certain HW property checks
     setenv("MESA_VK_IGNORE_CONFORMANCE_WARNING", "true", 1);
-
+    setenv("MESA_GLSL_CACHE_DISABLE", "true", 1);    // Disable cache if permissions are an issue
+    setenv("MESA_VK_WSI_PRESENT_MODE", "mailbox", 1);
+    
     // Load Turnip via adrenotools — note RTLD_LOCAL, not GLOBAL
     // and only ADRENOTOOLS_DRIVER_CUSTOM (like Winlator)
     g_turnip_handle = adrenotools_open_libvulkan(
