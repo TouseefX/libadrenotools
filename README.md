@@ -6,9 +6,14 @@ Credits To gamenative performance/WinNative source code for loading and some fix
 
 Credits To MrPurple for env loader
 
-Tested with Roblox (Galaxy Store Verison) with Turniup MTR 3.0.0 AXxx S20 Ultra 5G
+Tested with Roblox (Galaxy Store Verison) with Turniup MTR 3.0.0 AXxx S20 Ultra 5G (Vulkan)
 different is high alot of fps boost it seems slow at frist but gets faster
 I will release apk but roblox anti cheat flags it as tempering framework
+
+Tested With Starlight (Among Us Mod Launcher) with Turniup MTR 3.2.0 AXxx S20 Ultra 5G (Freedeno Mode OPENGL GS With Fallback Qcom Gallatin)
+
+This Launcher is known for lag so this was a good test and 60 fps felt like 120 fps? idk that is so werid to say
+And It also fixes Graphical Bugs some of then not all this is still without the performance fix there is no cache so we will test again later
 
 ### Adreno Tools 
 A library for applying rootless Adreno GPU driver modifications/replacements. Currently supports loading custom GPU drivers such as [turnip](https://docs.mesa3d.org/android.html#building-using-the-android-ndk),  enabling BCn textures and redirecting file operations to allow accessing shader dumps and modification of the [driver config file](https://gist.github.com/bylaws/04130932e2634d1c6a2a9729e3940d60) without root.
