@@ -19,8 +19,14 @@ API is documented in the `include/adrenotools` headers.
 #### Support and Requirements
 Android 10+
 Arm64
+
 Vulkan 1.3+
+
 Snapdragon 865+
+
+Your Turniup Driver must support Freedeno (OPENGL ES)
+
+not many apps use vulkan
 
 Please create an issue if support for anything else is desired.
 
