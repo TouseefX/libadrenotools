@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: BSD-2-Clause
 // Copyright © 2021 Billy Laws
 
+// List TODO:
+// fix performance
+// make more apps supported (only supports games not apps like adia64)
+// more stability
+// more support
+// add more freedeno support (turniup with opengl es)
+
 #include <vulkan/vulkan.h>
 #include <fstream>
 #include <string>
@@ -25,23 +32,21 @@
 #include <cstring>
 #include <jni.h>
 #include <shadowhook.h>
+#include <atomic>
 
 #define ALOGI(...) __android_log_print(ANDROID_LOG_INFO, "AdrenoToolsPatch", __VA_ARGS__)
 #define ALOGW(...) __android_log_print(ANDROID_LOG_WARN, "AdrenoToolsPatch", __VA_ARGS__)
 #define ALOGE(...) __android_log_print(ANDROID_LOG_ERROR, "AdrenoToolsPatch", __VA_ARGS__)
 
 void *adrenotools_open_libvulkan(int dlopenFlags, int featureFlags, const char *tmpLibDir, const char *hookLibDir, const char *customDriverDir, const char *customDriverName, const char *fileRedirectDir, void **userMappingHandle) {
-    // Bail out if linkernsbypass failed to load, this probably means we're on api < 28
     if (!linkernsbypass_load_status()) {
         ALOGE("FAILURE: Could not load linkernsbypass\n");
         return nullptr;
     }
 
-    // Always use memfd on Q+ since it's guaranteed to work only if tmplib is not set
     if (android_get_device_api_level() >= 29 && !tmpLibDir)
         tmpLibDir = nullptr;
 
-    // Verify that params for specific features are only passed if they are enabled
     if (!(featureFlags & ADRENOTOOLS_DRIVER_FILE_REDIRECT) && fileRedirectDir) {
          ALOGE("FAILURE: ADRENOTOOLS_DRIVER_FILE_REDIRECT present but no file redirect folder found\n");
         return nullptr;
@@ -57,7 +62,6 @@ void *adrenotools_open_libvulkan(int dlopenFlags, int featureFlags, const char *
         return nullptr;
     }
 
-    // Verify that params for enabled features are correct
     struct stat buf{};
 
     if (featureFlags & ADRENOTOOLS_DRIVER_CUSTOM) {
@@ -72,7 +76,6 @@ void *adrenotools_open_libvulkan(int dlopenFlags, int featureFlags, const char *
         }
     }
 
-    // Verify that params for enabled features are correct
     if (featureFlags & ADRENOTOOLS_DRIVER_FILE_REDIRECT) {
         if (!fileRedirectDir) {
             ALOGE("FAILURE: ADRENOTOOLS_DRIVER_REDIRECT_DIR present but no folder parameter was found\n");
@@ -85,32 +88,26 @@ void *adrenotools_open_libvulkan(int dlopenFlags, int featureFlags, const char *
         }
     }
 
-    // Create a namespace that can isolate our hook from the classloader namespace
     auto hookNs{android_create_namespace("adrenotools-libvulkan", hookLibDir, nullptr, ANDROID_NAMESPACE_TYPE_SHARED, nullptr, nullptr)};
 
-    // Link it to the default namespace so the hook can use libandroid etc
     if (!linkernsbypass_link_namespace_to_default_all_libs(hookNs)) {
         return nullptr;
     }
 
-    // Preload the hook implementation, otherwise we get a weird issue where despite being in NEEDED of the hook lib the hook's symbols will overwrite ours and cause an infinite loop
     auto hookImpl{linkernsbypass_namespace_dlopen("libhook_impl.so", RTLD_NOW, hookNs)};
     if (!hookImpl) {
         ALOGE("FAILURE: Couldn't preload the hook implementation\n");
         return nullptr;
     }
 
-    // Pass parameters to the hook implementation
     auto initHookParam{reinterpret_cast<void (*)(const void *)>(dlsym(hookImpl, "init_hook_param"))};
     if (!initHookParam) {
         ALOGE("FAILURE: Couldn't init hook params\n");
         return nullptr;
     }
 
-
     auto importMapping{[&]() -> adrenotools_gpu_mapping * {
         if (featureFlags & ADRENOTOOLS_DRIVER_GPU_MAPPING_IMPORT) {
-            // This will be leaked, but it's not a big deal since it's only a few bytes
             adrenotools_gpu_mapping *mapping{new adrenotools_gpu_mapping{}};
             *userMappingHandle = mapping;
             return mapping;
@@ -122,7 +119,6 @@ void *adrenotools_open_libvulkan(int dlopenFlags, int featureFlags, const char *
 
     initHookParam(new HookImplParams(featureFlags, tmpLibDir, hookLibDir, customDriverDir, customDriverName, fileRedirectDir, importMapping));
 
-    // Load the libvulkan hook into the isolated namespace
     if (!linkernsbypass_namespace_dlopen("libmain_hook.so", RTLD_GLOBAL, hookNs)) {
         ALOGE("FAILURE: Failed to load libvulkan into the isolated namespace\n");
         return nullptr;
@@ -143,7 +139,6 @@ bool adrenotools_import_user_mem(void *handle, void *hostPtr, uint64_t size) {
         .priv_len = size,
         .flags = KGSL_CACHEMODE_WRITEBACK << KGSL_CACHEMODE_SHIFT | KGSL_MEMFLAGS_IOCOHERENT,
         .type = KGSL_USER_MEM_TYPE_ADDR,
-
     };
 
     kgsl_gpuobj_info info{};
@@ -164,7 +159,7 @@ bool adrenotools_import_user_mem(void *handle, void *hostPtr, uint64_t size) {
     importMapping->host_ptr = hostPtr;
     importMapping->gpu_addr = info.gpuaddr;
     importMapping->size = size;
-    importMapping->flags = 0xc2600; //!< Unknown flags, but they are required for the mapping to work
+    importMapping->flags = 0xc2600;
 
     close(kgslFd);
     return true;
@@ -203,7 +198,7 @@ bool adrenotools_mem_gpu_allocate(void *handle, uint64_t *size) {
     mapping->host_ptr = nullptr;
     mapping->gpu_addr = info.gpuaddr;
     mapping->size = *size;
-    mapping->flags = 0xc2600; //!< Unknown flags, but they are required for the mapping to work
+    mapping->flags = 0xc2600;
 
     close(kgslFd);
     return true;
@@ -243,7 +238,7 @@ void adrenotools_set_turbo(bool turbo) {
         return;
 
     ioctl(kgslFd, IOCTL_KGSL_SETPROPERTY, &prop);
-    close (kgslFd);
+    close(kgslFd);
 }
 
 bool adrenotools_set_freedreno_env(const char *varName, const char *value) {
@@ -265,13 +260,13 @@ bool adrenotools_set_freedreno_env(const char *varName, const char *value) {
     }
 }
 
+static std::mutex g_init_mutex;
 static void *g_turnip_handle = NULL;
 static PFN_vkGetInstanceProcAddr g_turnip_gipa = NULL;
 static JavaVM* g_java_vm = nullptr;
 static void *gipa_stub = nullptr;
 static void* gdpa_stub = nullptr;
 
-// Get native library directory via Context API (like GameNativePerformance)
 static char* get_native_library_dir(JNIEnv* env, jobject context) {
     char* native_libdir = nullptr;
 
@@ -292,7 +287,6 @@ static char* get_native_library_dir(JNIEnv* env, jobject context) {
             }
         }
 
-        // Clean up
         env->DeleteLocalRef(contextClass);
         env->DeleteLocalRef(appInfo);
         env->DeleteLocalRef(appInfoClass);
@@ -301,7 +295,6 @@ static char* get_native_library_dir(JNIEnv* env, jobject context) {
     return native_libdir;
 }
 
-// Get driver path from app's files directory
 static char* get_driver_path(JNIEnv* env, jobject context) {
     char* driver_path = nullptr;
 
@@ -354,6 +347,13 @@ static PFN_vkVoidFunction hooked_vkGetDeviceProcAddr(VkDevice device, const char
 }
 
 static void init_turnip_driver(JNIEnv* env, jobject context) {
+    std::lock_guard<std::mutex> lock(g_init_mutex);
+    void* temp_stub = nullptr;
+    if (g_turnip_handle != nullptr) {
+        ALOGI("init_turnip_driver: already initialized, skipping");
+        return;
+    }
+    
     char* driver_path = get_driver_path(env, context);
     char* native_lib_dir = get_native_library_dir(env, context);
 
@@ -363,7 +363,7 @@ static void init_turnip_driver(JNIEnv* env, jobject context) {
     }
 
     char tmpdir[512];
-    snprintf(tmpdir, sizeof(tmpdir), "%s/temp/", driver_path); 
+    snprintf(tmpdir, sizeof(tmpdir), "%s/temp/", driver_path);
     mkdir(tmpdir, S_IRWXU | S_IRWXG);
 
     char cache_dir[512];
@@ -371,9 +371,7 @@ static void init_turnip_driver(JNIEnv* env, jobject context) {
     mkdir(cache_dir, S_IRWXU | S_IRWXG);
 
     setenv("MESA_DISK_CACHE_DIR", cache_dir, 1);
-    
-    // Load Turnip via adrenotools — note RTLD_LOCAL, not GLOBAL
-    // and only ADRENOTOOLS_DRIVER_CUSTOM (like Winlator)
+
     g_turnip_handle = adrenotools_open_libvulkan(
         RTLD_LOCAL | RTLD_NOW,
         ADRENOTOOLS_DRIVER_CUSTOM,
@@ -397,11 +395,10 @@ static void init_turnip_driver(JNIEnv* env, jobject context) {
     }
 
     ALOGI("Turnip loaded, setting up hooks...");
-    
-    // dlopen_stub = shadowhook_hook_sym_name("libdl.so", "dlopen", (void*)hooked_dlopen, NULL);
+
     gipa_stub = shadowhook_hook_sym_name("libvulkan.so", "vkGetInstanceProcAddr", (void*)hooked_vkGetInstanceProcAddr, NULL);
     gdpa_stub = shadowhook_hook_sym_name("libvulkan.so", "vkGetDeviceProcAddr", (void*)hooked_vkGetDeviceProcAddr, NULL);
-    
+
     if (gipa_stub) {
         ALOGI("ShadowHook: Turnip hooks installed successfully");
     } else {
@@ -413,33 +410,69 @@ cleanup:
     free(native_lib_dir);
 }
 
-extern "C" JNIEXPORT void JNICALL
-Java_com_game_TurnipLoader_initTurnipDriver(JNIEnv* env, jclass clazz, jobject context) {
-    if (!context) {
-        ALOGE("Context is null!");
-        return;
-    }
-    init_turnip_driver(env, context);
-}
-
 extern "C" JNIEXPORT jint JNICALL
 JNI_OnLoad(JavaVM* vm, void* reserved) {
     ALOGI("JNI_OnLoad called");
     g_java_vm = vm;
 
-    setenv("MESA_GLSL_CACHE_DISABLE", "false", 1);
-    setenv("MESA_DISK_CACHE_SINGLE_FILE", "true", 1);
     setenv("MESA_VK_VERSION_OVERRIDE", "1.3", 1);
-    setenv("MESA_VULKAN_ICD_SELECT", "freedreno", 1);
+    setenv("MESA_VULKAN_ICD_SELECT", "turnip", 1);
     setenv("FD_DEV_FEATURES", "enable_tp_ubwc_flag_hint=1", 1);
     setenv("MESA_VK_TRACE", "false", 1);
-    setenv("MESA_LOADER_DRIVER_OVERRIDE", "freedreno", 1);
     setenv("MESA_DEBUG", "silent", 1);
     setenv("GALLIUM_PRINT_OPTIONS", "0", 1);
     setenv("MESA_VK_IGNORE_CONFORMANCE_WARNING", "true", 1);
-    setenv("TU_DEBUG", "noconfirm,sysmem,noflushall", 1);
+    setenv("TU_DEBUG", "noconfirm,noflushall", 1);
+    setenv("TU_DEVELOPER_MODE", "1", 1);
+    setenv("MESA_VK_DEVICE_SELECT_FORCE_DEFAULT_DEVICE", "1", 1);
     
+    setenv("MESA_LOADER_DRIVER_OVERRIDE", "kgsl", 1);
+    setenv("GALLIUM_DRIVER", "kgsl", 1);
+    setenv("EGL_PLATFORM", "android", 1);
+    setenv("MESA_GL_VERSION_OVERRIDE", "4.6", 1);
+    setenv("MESA_GLES_VERSION_OVERRIDE", "3.2", 1);
+
     shadowhook_init(SHADOWHOOK_MODE_SHARED, true);
-    
+
+    JNIEnv* env = nullptr;
+    if (vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) == JNI_OK && env) {
+        jclass activityThread = env->FindClass("android/app/ActivityThread");
+        jmethodID currentApp = env->GetStaticMethodID(activityThread,
+            "currentApplication", "()Landroid/app/Application;");
+        jobject app = env->CallStaticObjectMethod(activityThread, currentApp);
+
+        if (app) {
+            ALOGI("JNI_OnLoad: got application context, self-initializing Turnip");
+            init_turnip_driver(env, app);
+        } else {
+            ALOGW("JNI_OnLoad: currentApplication is null, retrying on background thread");
+            std::thread([]() {
+                std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+                JavaVM* vm = g_java_vm;
+                if (!vm) return;
+
+                JNIEnv* env = nullptr;
+                vm->AttachCurrentThread(&env, nullptr);
+
+                jclass activityThread = env->FindClass("android/app/ActivityThread");
+                jmethodID currentApp = env->GetStaticMethodID(activityThread,
+                    "currentApplication", "()Landroid/app/Application;");
+                jobject app = env->CallStaticObjectMethod(activityThread, currentApp);
+
+                if (app) {
+                    ALOGI("Deferred init: got application context, initializing Turnip");
+                    init_turnip_driver(env, app);
+                } else {
+                    ALOGE("Deferred init: currentApplication still null, giving up");
+                }
+
+                vm->DetachCurrentThread();
+            }).detach();
+        }
+    } else {
+        ALOGE("JNI_OnLoad: failed to get JNIEnv");
+    }
+
     return JNI_VERSION_1_6;
 }
