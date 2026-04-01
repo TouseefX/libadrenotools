@@ -1,7 +1,6 @@
 .class public Lcom/game/TurnipLoader;
 .super Ljava/lang/Object;
 
-
 # direct methods
 .method public static copyDriver(Landroid/content/Context;)V
     .registers 8
@@ -25,54 +24,26 @@
 
     invoke-virtual {v0}, Ljava/io/File;->mkdir()Z
 
-    # ── Vulkan / Turnip drivers ──────────────────────────────────────────
+    # ── Write all drivers to the "turnip" folder (v0) ──────────────────
     :cond_15
+    # Vulkan Drivers
     const-string/jumbo v1, "libvulkan_freedreno.so"
-
     invoke-static {p0, v0, v1}, Lcom/game/TurnipLoader;->writeFile(Landroid/content/Context;Ljava/io/File;Ljava/lang/String;)V
 
     const-string/jumbo v1, "vulkan.adreno.so"
-
     invoke-static {p0, v0, v1}, Lcom/game/TurnipLoader;->writeFile(Landroid/content/Context;Ljava/io/File;Ljava/lang/String;)V
 
-    # ── ANGLE OpenGL ES drivers ──────────────────────────────────────────
-    # Create a separate subdirectory: filesDir/angle/
-    new-instance v3, Ljava/io/File;
+    const-string/jumbo v1, "libEGL_angle.so"
+    invoke-static {p0, v0, v1}, Lcom/game/TurnipLoader;->writeFile(Landroid/content/Context;Ljava/io/File;Ljava/lang/String;)V
 
-    invoke-virtual {p0}, Landroid/content/Context;->getFilesDir()Ljava/io/File;
+    const-string/jumbo v1, "libGLESv1_CM_angle.so"
+    invoke-static {p0, v0, v1}, Lcom/game/TurnipLoader;->writeFile(Landroid/content/Context;Ljava/io/File;Ljava/lang/String;)V
 
-    move-result-object v4
+    const-string/jumbo v1, "libGLESv2_angle.so"
+    invoke-static {p0, v0, v1}, Lcom/game/TurnipLoader;->writeFile(Landroid/content/Context;Ljava/io/File;Ljava/lang/String;)V
 
-    const-string/jumbo v5, "angle"
-
-    invoke-direct {v3, v4, v5}, Ljava/io/File;-><init>(Ljava/io/File;Ljava/lang/String;)V
-
-    invoke-virtual {v3}, Ljava/io/File;->exists()Z
-
-    move-result v4
-
-    if-nez v4, :cond_angle
-
-    invoke-virtual {v3}, Ljava/io/File;->mkdir()Z
-
-    :cond_angle
-    # libEGL_angle.so
-    const-string/jumbo v4, "libEGL_angle.so"
-
-    invoke-static {p0, v3, v4}, Lcom/game/TurnipLoader;->writeFile(Landroid/content/Context;Ljava/io/File;Ljava/lang/String;)V
-
-    # libGLESv1_CM_angle.so
-    const-string/jumbo v4, "libGLESv1_CM_angle.so"
-
-    invoke-static {p0, v3, v4}, Lcom/game/TurnipLoader;->writeFile(Landroid/content/Context;Ljava/io/File;Ljava/lang/String;)V
-
-    # libGLESv2_angle.so
-    const-string/jumbo v4, "libGLESv2_angle.so"
-
-    invoke-static {p0, v3, v4}, Lcom/game/TurnipLoader;->writeFile(Landroid/content/Context;Ljava/io/File;Ljava/lang/String;)V
-
-    :try_end_angle
-    .catch Ljava/io/IOException; {:try_start_0 .. :try_end_angle} :catch_end
+    :try_end_0
+    .catch Ljava/io/IOException; {:try_start_0 .. :try_end_0} :catch_end
 
     :catch_end
     return-void
