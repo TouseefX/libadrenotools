@@ -1,46 +1,37 @@
-.class public Lcom/game/TurnipLoader;
-.super Ljava/lang/Object;
-
-# direct methods
 .method public static copyDriver(Landroid/content/Context;)V
     .registers 8
 
     :try_start_0
     new-instance v0, Ljava/io/File;
-
     invoke-virtual {p0}, Landroid/content/Context;->getFilesDir()Ljava/io/File;
-
     move-result-object v1
-
     const-string/jumbo v2, "turnip"
-
     invoke-direct {v0, v1, v2}, Ljava/io/File;-><init>(Ljava/io/File;Ljava/lang/String;)V
 
     invoke-virtual {v0}, Ljava/io/File;->exists()Z
-
     move-result v1
-
     if-nez v1, :cond_15
-
     invoke-virtual {v0}, Ljava/io/File;->mkdir()Z
 
-    # ── Write all drivers to the "turnip" folder (v0) ──────────────────
     :cond_15
-    # Vulkan Drivers
+    # 1. Copy libvulkan_freedreno.so (Original name)
     const-string/jumbo v1, "libvulkan_freedreno.so"
-    invoke-static {p0, v0, v1}, Lcom/game/TurnipLoader;->writeFile(Landroid/content/Context;Ljava/io/File;Ljava/lang/String;)V
+    invoke-static {p0, v0, v1, v1}, Lcom/game/TurnipLoader;->writeNamedFile(Landroid/content/Context;Ljava/io/File;Ljava/lang/String;Ljava/lang/String;)V
 
-    const-string/jumbo v1, "vulkan.adreno.so"
-    invoke-static {p0, v0, v1}, Lcom/game/TurnipLoader;->writeFile(Landroid/content/Context;Ljava/io/File;Ljava/lang/String;)V
+    # 2. Copy libvulkan_freedreno.so AGAIN (Renamed to vulkan.adreno.so)
+    const-string/jumbo v1, "libvulkan_freedreno.so"
+    const-string/jumbo v2, "vulkan.adreno.so"
+    invoke-static {p0, v0, v1, v2}, Lcom/game/TurnipLoader;->writeNamedFile(Landroid/content/Context;Ljava/io/File;Ljava/lang/String;Ljava/lang/String;)V
 
+    # 3. Copy ANGLE files
     const-string/jumbo v1, "libEGL_angle.so"
-    invoke-static {p0, v0, v1}, Lcom/game/TurnipLoader;->writeFile(Landroid/content/Context;Ljava/io/File;Ljava/lang/String;)V
+    invoke-static {p0, v0, v1, v1}, Lcom/game/TurnipLoader;->writeNamedFile(Landroid/content/Context;Ljava/io/File;Ljava/lang/String;Ljava/lang/String;)V
 
     const-string/jumbo v1, "libGLESv1_CM_angle.so"
-    invoke-static {p0, v0, v1}, Lcom/game/TurnipLoader;->writeFile(Landroid/content/Context;Ljava/io/File;Ljava/lang/String;)V
+    invoke-static {p0, v0, v1, v1}, Lcom/game/TurnipLoader;->writeNamedFile(Landroid/content/Context;Ljava/io/File;Ljava/lang/String;Ljava/lang/String;)V
 
     const-string/jumbo v1, "libGLESv2_angle.so"
-    invoke-static {p0, v0, v1}, Lcom/game/TurnipLoader;->writeFile(Landroid/content/Context;Ljava/io/File;Ljava/lang/String;)V
+    invoke-static {p0, v0, v1, v1}, Lcom/game/TurnipLoader;->writeNamedFile(Landroid/content/Context;Ljava/io/File;Ljava/lang/String;Ljava/lang/String;)V
 
     :try_end_0
     .catch Ljava/io/IOException; {:try_start_0 .. :try_end_0} :catch_end
@@ -49,7 +40,8 @@
     return-void
 .end method
 
-.method private static writeFile(Landroid/content/Context;Ljava/io/File;Ljava/lang/String;)V
+# Enhanced copy method: p2 is source (assets), p3 is destination (filename)
+.method private static writeNamedFile(Landroid/content/Context;Ljava/io/File;Ljava/lang/String;Ljava/lang/String;)V
     .registers 8
     .annotation system Ldalvik/annotation/Throws;
         value = {
@@ -58,46 +50,31 @@
     .end annotation
 
     invoke-virtual {p0}, Landroid/content/Context;->getAssets()Landroid/content/res/AssetManager;
-
     move-result-object v0
-
     invoke-virtual {v0, p2}, Landroid/content/res/AssetManager;->open(Ljava/lang/String;)Ljava/io/InputStream;
-
     move-result-object v0
 
     new-instance v1, Ljava/io/File;
-
-    invoke-direct {v1, p1, p2}, Ljava/io/File;-><init>(Ljava/io/File;Ljava/lang/String;)V
+    invoke-direct {v1, p1, p3}, Ljava/io/File;-><init>(Ljava/io/File;Ljava/lang/String;)V
 
     new-instance v2, Ljava/io/FileOutputStream;
-
     invoke-direct {v2, v1}, Ljava/io/FileOutputStream;-><init>(Ljava/io/File;)V
 
     const/16 v1, 0x1000
-
     new-array v1, v1, [B
 
     :goto_16
     invoke-virtual {v0, v1}, Ljava/io/InputStream;->read([B)I
-
     move-result v3
-
     const/4 v4, -0x1
-
     if-eq v3, v4, :cond_22
-
     const/4 v4, 0x0
-
     invoke-virtual {v2, v1, v4, v3}, Ljava/io/OutputStream;->write([BII)V
-
     goto :goto_16
 
     :cond_22
     invoke-virtual {v2}, Ljava/io/OutputStream;->flush()V
-
     invoke-virtual {v2}, Ljava/io/OutputStream;->close()V
-
     invoke-virtual {v0}, Ljava/io/InputStream;->close()V
-
     return-void
 .end method
