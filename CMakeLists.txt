@@ -46,7 +46,7 @@ target_include_directories(adrenotools PRIVATE
     ${bytehook_SOURCE_DIR}/bytehook/src/main/cpp/include
 )
 target_compile_options(adrenotools PRIVATE -Wall -Wextra)
-target_link_libraries(adrenotools android -Wl,--whole-archive linkernsbypass -Wl,--no-whole-archive shadowhook bytehook log EGL GLESv2)
+target_link_libraries(adrenotools android -Wl,--whole-archive linkernsbypass -Wl,--no-whole-archive shadowhook bytehook)
 
 set_target_properties(adrenotools PROPERTIES
     CXX_STANDARD 17
