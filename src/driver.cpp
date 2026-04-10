@@ -1,13 +1,6 @@
 // SPDX-License-Identifier: BSD-2-Clause
 // Copyright © 2021 Billy Laws
 
-// List TODO:
-// fix performance
-// make more apps supported (only supports games not apps like adia64)
-// more stability
-// more support
-// add more freedeno support (turniup with opengl es)
-
 #include <vulkan/vulkan.h>
 #include <fstream>
 #include <string>
@@ -33,10 +26,17 @@
 #include <jni.h>
 #include <shadowhook.h>
 #include <atomic>
+#include <pthread.h>
+#include <vector>
+#include <mutex>
+#include <bytehook.h>
 
 #define ALOGI(...) __android_log_print(ANDROID_LOG_INFO, "AdrenoToolsPatch", __VA_ARGS__)
 #define ALOGW(...) __android_log_print(ANDROID_LOG_WARN, "AdrenoToolsPatch", __VA_ARGS__)
 #define ALOGE(...) __android_log_print(ANDROID_LOG_ERROR, "AdrenoToolsPatch", __VA_ARGS__)
+
+static PFN_vkGetInstanceProcAddr gipa_stub = nullptr;
+static PFN_vkGetDeviceProcAddr   gdpa_stub = nullptr;
 
 void *adrenotools_open_libvulkan(int dlopenFlags, int featureFlags, const char *tmpLibDir, const char *hookLibDir, const char *customDriverDir, const char *customDriverName, const char *fileRedirectDir, void **userMappingHandle) {
     if (!linkernsbypass_load_status()) {
@@ -134,12 +134,12 @@ bool adrenotools_import_user_mem(void *handle, void *hostPtr, uint64_t size) {
         .virtaddr = reinterpret_cast<uint64_t>(hostPtr),
     };
 
-    kgsl_gpuobj_import userMemImport{
-        .priv = reinterpret_cast<uint64_t>(&addr),
-        .priv_len = size,
-        .flags = KGSL_CACHEMODE_WRITEBACK << KGSL_CACHEMODE_SHIFT | KGSL_MEMFLAGS_IOCOHERENT,
-        .type = KGSL_USER_MEM_TYPE_ADDR,
-    };
+    kgsl_gpuobj_import userMemImport{};
+    userMemImport.priv     = reinterpret_cast<uint64_t>(&addr);
+    userMemImport.priv_len = size;
+    userMemImport.flags    = KGSL_CACHEMODE_WRITEBACK << KGSL_CACHEMODE_SHIFT
+                           | KGSL_MEMFLAGS_IOCOHERENT;
+    userMemImport.type     = KGSL_USER_MEM_TYPE_ADDR;
 
     kgsl_gpuobj_info info{};
 
@@ -172,10 +172,10 @@ err:
 bool adrenotools_mem_gpu_allocate(void *handle, uint64_t *size) {
     auto mapping{reinterpret_cast<adrenotools_gpu_mapping *>(handle)};
 
-    kgsl_gpuobj_alloc gpuobjAlloc{
-        .size = *size,
-        .flags = KGSL_CACHEMODE_WRITEBACK << KGSL_CACHEMODE_SHIFT | KGSL_MEMFLAGS_IOCOHERENT,
-    };
+    kgsl_gpuobj_alloc gpuobjAlloc{};
+    gpuobjAlloc.size  = *size;
+    gpuobjAlloc.flags = KGSL_CACHEMODE_WRITEBACK << KGSL_CACHEMODE_SHIFT
+                      | KGSL_MEMFLAGS_IOCOHERENT;
 
     kgsl_gpuobj_info info{};
 
@@ -263,9 +263,27 @@ bool adrenotools_set_freedreno_env(const char *varName, const char *value) {
 static std::mutex g_init_mutex;
 static void *g_turnip_handle = NULL;
 static PFN_vkGetInstanceProcAddr g_turnip_gipa = NULL;
+static PFN_vkGetDeviceProcAddr g_turnip_gdpa = nullptr;
+static std::once_flag g_init_flag;
 static JavaVM* g_java_vm = nullptr;
-static void *gipa_stub = nullptr;
-static void* gdpa_stub = nullptr;
+
+static PFN_vkVoidFunction hooked_vkGetInstanceProcAddr(VkInstance instance, const char* pName) {
+    if (g_turnip_gipa) {
+        auto func = g_turnip_gipa(instance, pName);
+        if (func) return func;
+    }
+    return gipa_stub(instance, pName);
+}
+
+static PFN_vkVoidFunction hooked_vkGetDeviceProcAddr(VkDevice device, const char* pName) {
+    if (g_turnip_gdpa) {
+        auto func = g_turnip_gdpa(device, pName);
+        if (func) return func;
+    }
+    if (gdpa_stub)
+        return gdpa_stub(device, pName);
+    return nullptr;
+}
 
 static char* get_native_library_dir(JNIEnv* env, jobject context) {
     char* native_libdir = nullptr;
@@ -274,7 +292,7 @@ static char* get_native_library_dir(JNIEnv* env, jobject context) {
         jclass contextClass = env->FindClass("android/content/Context");
         jmethodID getAppInfo = env->GetMethodID(contextClass, "getApplicationInfo", "()Landroid/content/pm/ApplicationInfo;");
         jobject appInfo = env->CallObjectMethod(context, getAppInfo);
-        
+
         jclass appInfoClass = env->GetObjectClass(appInfo);
         jfieldID fieldId = env->GetFieldID(appInfoClass, "nativeLibraryDir", "Ljava/lang/String;");
         jstring jPath = (jstring)env->GetObjectField(appInfo, fieldId);
@@ -295,80 +313,35 @@ static char* get_native_library_dir(JNIEnv* env, jobject context) {
     return native_libdir;
 }
 
-static char* get_driver_path(JNIEnv* env, jobject context) {
-    char* driver_path = nullptr;
-
-    if (context != nullptr) {
-        jclass class_ = env->FindClass("android/content/ContextWrapper");
-        if (!class_) return nullptr;
-
-        jmethodID getFilesDir = env->GetMethodID(class_, "getFilesDir", "()Ljava/io/File;");
-        jobject filesDirObj = env->CallObjectMethod(context, getFilesDir);
-        jclass fileClass = env->GetObjectClass(filesDirObj);
-        jmethodID getAbsolutePath = env->GetMethodID(fileClass, "getAbsolutePath", "()Ljava/lang/String;");
-
-        jstring absolutePath = (jstring)env->CallObjectMethod(filesDirObj, getAbsolutePath);
-        if (absolutePath) {
-            const char* path_chars = env->GetStringUTFChars(absolutePath, nullptr);
-            if (path_chars) {
-                if (asprintf(&driver_path, "%s/turnip/", path_chars) == -1)
-                    driver_path = nullptr;
-                env->ReleaseStringUTFChars(absolutePath, path_chars);
-            }
-        }
-
-        env->DeleteLocalRef(class_);
-    }
-
-    return driver_path;
-}
-
-static PFN_vkVoidFunction hooked_vkGetInstanceProcAddr(VkInstance instance, const char* pName) {
-    if (g_turnip_gipa) {
-        auto func = g_turnip_gipa(instance, pName);
-        if (func) return func;
-    }
-    
-    typedef PFN_vkVoidFunction (*orig_t)(VkInstance, const char*);
-    return ((orig_t)gipa_stub)(instance, pName);
-}
-
-static PFN_vkVoidFunction hooked_vkGetDeviceProcAddr(VkDevice device, const char* pName) {
-    if (g_turnip_gipa) {
-        auto func = g_turnip_gipa((VkInstance)device, pName);
-        if (func) return func;
-    }
-    
-    if (gdpa_stub) {
-        typedef PFN_vkVoidFunction (*gdpa_t)(VkDevice, const char*);
-        return ((gdpa_t)gdpa_stub)(device, pName);
-    }
-    return nullptr;
-}
-
 static void init_turnip_driver(JNIEnv* env, jobject context) {
     std::lock_guard<std::mutex> lock(g_init_mutex);
-    void* temp_stub = nullptr;
     if (g_turnip_handle != nullptr) {
         ALOGI("init_turnip_driver: already initialized, skipping");
         return;
     }
-    
-    char* driver_path = get_driver_path(env, context);
+
     char* native_lib_dir = get_native_library_dir(env, context);
 
-    if (!driver_path || access(driver_path, F_OK) != 0) {
-        ALOGE("Driver path not found");
-        return;
-    }
+    char fixed_dir[512];
+    snprintf(fixed_dir, sizeof(fixed_dir), "%s/", native_lib_dir);
+    __android_log_print(ANDROID_LOG_ERROR, "AdrenoToolsPatch", "Native Lib Dir: %s", fixed_dir);
+
+    jclass contextClass = env->GetObjectClass(context);
+    jmethodID getCacheDir = env->GetMethodID(contextClass, "getCacheDir", "()Ljava/io/File;");
+    jobject cacheFileObj = env->CallObjectMethod(context, getCacheDir);
+    jclass fileClass = env->GetObjectClass(cacheFileObj);
+    jmethodID getAbsolutePath = env->GetMethodID(fileClass, "getAbsolutePath", "()Ljava/lang/String;");
+    jstring jPath = (jstring)env->CallObjectMethod(cacheFileObj, getAbsolutePath);
+
+    const char* base_cache_path = env->GetStringUTFChars(jPath, nullptr);
 
     char tmpdir[512];
-    snprintf(tmpdir, sizeof(tmpdir), "%s/temp/", driver_path);
-    mkdir(tmpdir, S_IRWXU | S_IRWXG);
+    snprintf(tmpdir, sizeof(tmpdir), "%s/turnip_tmp/", base_cache_path);
+    mkdir(tmpdir, 0775);
 
     char cache_dir[512];
-    snprintf(cache_dir, sizeof(cache_dir), "%sshader_cache/", driver_path);
-    mkdir(cache_dir, S_IRWXU | S_IRWXG);
+    snprintf(cache_dir, sizeof(cache_dir), "%s/turnip_shader_cache/", base_cache_path);
+    mkdir(cache_dir, 0775);
 
     setenv("MESA_DISK_CACHE_DIR", cache_dir, 1);
 
@@ -377,7 +350,7 @@ static void init_turnip_driver(JNIEnv* env, jobject context) {
         ADRENOTOOLS_DRIVER_CUSTOM,
         tmpdir,
         native_lib_dir,
-        driver_path,
+        fixed_dir,
         "libvulkan_freedreno.so",
         NULL,
         NULL
@@ -387,34 +360,39 @@ static void init_turnip_driver(JNIEnv* env, jobject context) {
         ALOGE("Failed to load Turnip via adrenotools");
         goto cleanup;
     }
-    
+
     g_turnip_gipa = (PFN_vkGetInstanceProcAddr)dlsym(g_turnip_handle, "vkGetInstanceProcAddr");
     if (!g_turnip_gipa) {
         ALOGE("Failed to get vkGetInstanceProcAddr from Turnip");
         goto cleanup;
     }
 
-    ALOGI("Turnip loaded, setting up hooks...");
-
-    gipa_stub = shadowhook_hook_sym_name("libvulkan.so", "vkGetInstanceProcAddr", (void*)hooked_vkGetInstanceProcAddr, NULL);
-    gdpa_stub = shadowhook_hook_sym_name("libvulkan.so", "vkGetDeviceProcAddr", (void*)hooked_vkGetDeviceProcAddr, NULL);
-
-    if (gipa_stub) {
-        ALOGI("ShadowHook: Turnip hooks installed successfully");
-    } else {
-        ALOGE("ShadowHook: Failed to install one or more hooks");
+    g_turnip_gdpa = (PFN_vkGetDeviceProcAddr)dlsym(g_turnip_handle, "vkGetDeviceProcAddr");
+    if (!g_turnip_gdpa) {
+        ALOGE("Failed to get vkGetDeviceProcAddr from Turnip");
+        goto cleanup;
     }
 
+    ALOGI("Turnip loaded, setting up hooks...");
+
+    gipa_stub = (PFN_vkGetInstanceProcAddr)shadowhook_hook_sym_name("libvulkan.so", "vkGetInstanceProcAddr", (void*)hooked_vkGetInstanceProcAddr, NULL);
+    gdpa_stub = (PFN_vkGetDeviceProcAddr)shadowhook_hook_sym_name("libvulkan.so", "vkGetDeviceProcAddr", (void*)hooked_vkGetDeviceProcAddr, NULL);
+
+    if (gipa_stub)
+        ALOGI("ShadowHook: Turnip hooks installed successfully");
+    else
+        ALOGE("ShadowHook: Failed to install one or more hooks");
+
 cleanup:
-    free(driver_path);
+    env->ReleaseStringUTFChars(jPath, base_cache_path);
+    env->DeleteLocalRef(contextClass);
+    env->DeleteLocalRef(cacheFileObj);
+    env->DeleteLocalRef(fileClass);
     free(native_lib_dir);
 }
 
-extern "C" JNIEXPORT jint JNICALL
-JNI_OnLoad(JavaVM* vm, void* reserved) {
-    ALOGI("JNI_OnLoad called");
-    g_java_vm = vm;
-
+__attribute__((constructor))
+static void global_atomic_init() {
     setenv("MESA_VK_VERSION_OVERRIDE", "1.3", 1);
     setenv("MESA_VULKAN_ICD_SELECT", "turnip", 1);
     setenv("FD_DEV_FEATURES", "enable_tp_ubwc_flag_hint=1", 1);
@@ -422,57 +400,55 @@ JNI_OnLoad(JavaVM* vm, void* reserved) {
     setenv("MESA_DEBUG", "silent", 1);
     setenv("GALLIUM_PRINT_OPTIONS", "0", 1);
     setenv("MESA_VK_IGNORE_CONFORMANCE_WARNING", "true", 1);
-    setenv("TU_DEBUG", "noconfirm,noflushall,pwr_max", 1); // max performance and let the autotuner do the work
+    setenv("TU_DEBUG", "noconfirm,noflushall,pwr_max", 1);
     setenv("TU_DEVELOPER_MODE", "1", 1);
     setenv("MESA_VK_DEVICE_SELECT_FORCE_DEFAULT_DEVICE", "1", 1);
-    // opengl settings (opengl support soon)
-    setenv("MESA_LOADER_DRIVER_OVERRIDE", "kgsl", 1);
-    setenv("GALLIUM_DRIVER", "kgsl", 1);
-    setenv("EGL_PLATFORM", "android", 1);
-    setenv("MESA_GL_VERSION_OVERRIDE", "4.6", 1);
-    setenv("MESA_GLES_VERSION_OVERRIDE", "3.2", 1);
+    
+    setenv("UNITY_FORCE_VULKAN", "1", 1);
+    setenv("UNITY_VULKAN_FORCE_DEVICE_INDEX", "0", 1);
+    setenv("UNITY_VULKAN_DISABLE_PREPASS", "0", 1);
+    setenv("gfx-enable-gfx-jobs", "1", 1);
 
     shadowhook_init(SHADOWHOOK_MODE_SHARED, true);
+}
 
+void perform_init(JavaVM* vm) {
+	ALOGI("JNI_OnLoad: started");
     JNIEnv* env = nullptr;
-    if (vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) == JNI_OK && env) {
-        jclass activityThread = env->FindClass("android/app/ActivityThread");
-        jmethodID currentApp = env->GetStaticMethodID(activityThread,
-            "currentApplication", "()Landroid/app/Application;");
-        jobject app = env->CallStaticObjectMethod(activityThread, currentApp);
-
-        if (app) {
-            ALOGI("JNI_OnLoad: got application context, self-initializing Turnip");
-            init_turnip_driver(env, app);
-        } else {
-            ALOGW("JNI_OnLoad: currentApplication is null, retrying on background thread");
-            std::thread([]() {
-                std::this_thread::sleep_for(std::chrono::milliseconds(500));
-
-                JavaVM* vm = g_java_vm;
-                if (!vm) return;
-
-                JNIEnv* env = nullptr;
-                vm->AttachCurrentThread(&env, nullptr);
-
-                jclass activityThread = env->FindClass("android/app/ActivityThread");
-                jmethodID currentApp = env->GetStaticMethodID(activityThread,
-                    "currentApplication", "()Landroid/app/Application;");
-                jobject app = env->CallStaticObjectMethod(activityThread, currentApp);
-
-                if (app) {
-                    ALOGI("Deferred init: got application context, initializing Turnip");
-                    init_turnip_driver(env, app);
-                } else {
-                    ALOGE("Deferred init: currentApplication still null, giving up");
-                }
-
-                vm->DetachCurrentThread();
-            }).detach();
-        }
-    } else {
-        ALOGE("JNI_OnLoad: failed to get JNIEnv");
+    if (vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK) {
+        if (vm->AttachCurrentThread(&env, nullptr) != JNI_OK) return;
     }
 
+    static jclass activityThreadCls = (jclass)env->NewGlobalRef(env->FindClass("android/app/ActivityThread"));
+    static jmethodID currentAppMid = env->GetStaticMethodID(activityThreadCls, "currentApplication", "()Landroid/app/Application;");
+
+    jobject app = env->CallStaticObjectMethod(activityThreadCls, currentAppMid);
+
+    if (app) {
+        ALOGI("JNI_OnLoad: Initializing Turnip immediately");
+        init_turnip_driver(env, app);
+    } else {
+        std::thread([vm]() {
+            JNIEnv* t_env = nullptr;
+            vm->AttachCurrentThread(&t_env, nullptr);
+
+            jclass atCls = t_env->FindClass("android/app/ActivityThread");
+            jmethodID caMid = t_env->GetStaticMethodID(atCls, "currentApplication", "()Landroid/app/Application;");
+
+            jobject t_app = nullptr;
+            for (int i = 0; i < 10 && !t_app; ++i) {
+                t_app = t_env->CallStaticObjectMethod(atCls, caMid);
+                if (!t_app) std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+
+            if (t_app) init_turnip_driver(t_env, t_app);
+            vm->DetachCurrentThread();
+        }).detach();
+    }
+}
+
+extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* reserved) {
+    g_java_vm = vm;
+    std::call_once(g_init_flag, perform_init, vm);
     return JNI_VERSION_1_6;
 }
