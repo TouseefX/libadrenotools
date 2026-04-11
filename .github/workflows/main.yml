@@ -29,7 +29,8 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -Dlinkernsbypass_BUILD_SHARED=ON
           make -j$(nproc)
-          mkdir libadrenotools
+          mkdir -p libadrenotools
+          shopt -s globstar
           cp build/**/*.so libadrenotools/
           
       - name: List files (Diagnostic)
