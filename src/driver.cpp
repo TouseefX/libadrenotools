@@ -398,11 +398,13 @@ __attribute__((constructor))
 static void global_atomic_init() {
     setenv("MESA_VK_VERSION_OVERRIDE", "1.3", 1);
     setenv("MESA_VULKAN_ICD_SELECT", "turnip", 1);
-    setenv("MESA_VK_TRACE", "false", 1);
+    setenv("TU_DEBUG", "sysmem,nolrz,noconfirm,noflushall,binning_pass,noubwc", 1);
     setenv("MESA_VK_IGNORE_CONFORMANCE_WARNING", "true", 1);
-    setenv("TU_DEBUG", "noconfirm,noflushall,pwr_max", 1);
-    setenv("TU_DEVELOPER_MODE", "1", 1);
     setenv("MESA_VK_DEVICE_SELECT_FORCE_DEFAULT_DEVICE", "1", 1);
+	setenv("MESA_VK_WSI_PRESENT_MODE", "immediate", 1);
+    setenv("MESA_NO_ERROR", "1", 1);
+    setenv("MESA_GLSL_CACHE_MAX_SIZE", "1G", 1);
+	setenv("IR3_SHADER_DEBUG", "nopreamble", 1);
     
     setenv("GALLIUM_PRINT_OPTIONS", "0", 1);
     setenv("FD_DEV_FEATURES", "enable_tp_ubwc_flag_hint=1", 1);
