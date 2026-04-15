@@ -6,8 +6,12 @@ Credits To gamenative performance/WinNative source code for loading and some fix
 
 Credits To MrPurple for env loader
 
-Tested with Roblox with Turniup MTR 3.2.0 AXxx S20 Ultra 5G (Vulkan)
+Tested with Roblox with Turniup MTR 3.2.0 AXxx S20 Note Ultra 5G (Vulkan)
 tested with games like Frontline and jump showdown ping is more less then before and fps is better with screen tearing issues 
+
+Tested with Roblox with Turniup MTR 3.2.0 AXxx S20 Ultra 5G (Vulkan)
+unlike the note verison this one was at maximum and has better performance but it got so hot the charging stopped working
+this phone used ro be a cry baby when I play jump showdown now its not lol
 
 ### Adreno Tools 
 A library for applying rootless Adreno GPU driver modifications/replacements. Currently supports loading custom GPU drivers such as [turnip](https://docs.mesa3d.org/android.html#building-using-the-android-ndk),  enabling BCn textures and redirecting file operations to allow accessing shader dumps and modification of the [driver config file](https://gist.github.com/bylaws/04130932e2634d1c6a2a9729e3940d60) without root.
