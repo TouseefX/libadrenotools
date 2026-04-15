@@ -382,6 +382,7 @@ static void init_turnip_driver(JNIEnv* env, jobject context) {
     gdpa_stub = (PFN_vkGetDeviceProcAddr)shadowhook_hook_sym_name("libvulkan.so", "vkGetDeviceProcAddr", (void*)hooked_vkGetDeviceProcAddr, NULL);
 
     if (gipa_stub)
+		adrenotools_set_turbo(true);
         ALOGI("ShadowHook: Turnip hooks installed successfully");
     else
         ALOGE("ShadowHook: Failed to install one or more hooks");
