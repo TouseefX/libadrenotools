@@ -403,7 +403,7 @@ __attribute__((constructor))
 static void global_atomic_init() {
     setenv("MESA_VK_VERSION_OVERRIDE", "1.3", 1);
     setenv("MESA_VULKAN_ICD_SELECT", "turnip", 1);
-    setenv("TU_DEBUG", "nolrz,noconfirm,noflushall,binning_pass,noubwc,perfcntrs", 1);
+    setenv("TU_DEBUG", "nolrz,noconfirm,noflushall,binning_pass,noubwc", 1);
     setenv("MESA_VK_IGNORE_CONFORMANCE_WARNING", "true", 1);
     setenv("MESA_VK_DEVICE_SELECT_FORCE_DEFAULT_DEVICE", "1", 1);
 	setenv("MESA_VK_WSI_PRESENT_MODE", "immediate", 1);
