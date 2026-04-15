@@ -401,31 +401,19 @@ cleanup:
 
 __attribute__((constructor))
 static void global_atomic_init() {
-    setenv("MESA_VK_VERSION_OVERRIDE", "1.3", 1);
     setenv("MESA_VULKAN_ICD_SELECT", "turnip", 1);
-    setenv("TU_DEBUG", "nolrz,noconfirm,noflushall,binning_pass,noubwc", 1);
+    setenv("TU_DEBUG", "noconfirm,noflushall", 1);
     setenv("MESA_VK_IGNORE_CONFORMANCE_WARNING", "true", 1);
     setenv("MESA_VK_DEVICE_SELECT_FORCE_DEFAULT_DEVICE", "1", 1);
 	setenv("MESA_VK_WSI_PRESENT_MODE", "immediate", 1);
     setenv("MESA_NO_ERROR", "1", 1);
     setenv("MESA_GLSL_CACHE_MAX_SIZE", "1G", 1);
-	setenv("IR3_SHADER_DEBUG", "nopreamble", 1);
 	setenv("ADRENO_TURBO", "1", 1);
 	setenv("KGSL_CONTEXT_PRIORITY", "1", 1);
     setenv("FD_DEV_FEATURES", "enable_tp_ubwc_flag_hint=1", 1);
     
     setenv("GALLIUM_PRINT_OPTIONS", "0", 1);
-    setenv("FD_DEV_FEATURES", "enable_tp_ubwc_flag_hint=1", 1);
     setenv("MESA_DEBUG", "silent", 1);
-    setenv("GALLIUM_DRIVER", "freedreno", 1);
-    setenv("MESA_LOADER_DRIVER_OVERRIDE", "freedreno", 1);
-    setenv("FD_MESA_DEBUG", "finer", 1);
-    setenv("FREEDRENO_KMD", "kgsl", 1);
-    setenv("EGL_PLATFORM", "android", 1);
-    setenv("MESA_GLES_VERSION_OVERRIDE", "3.2", 1);
-    setenv("MESA_GLSL_VERSION_OVERRIDE", "320", 1);
-    setenv("ZINK_USE_LAVAPIPE", "0", 1);
-    setenv("LIBGL_KOPPER_DRI2", "1", 1);
     
     setenv("UNITY_FORCE_VULKAN", "1", 1);
     setenv("UNITY_VULKAN_FORCE_DEVICE_INDEX", "0", 1);
