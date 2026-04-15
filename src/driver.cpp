@@ -30,6 +30,7 @@
 #include <vector>
 #include <mutex>
 #include <bytehook.h>
+#include <sys/resource.h>
 
 #define ALOGI(...) __android_log_print(ANDROID_LOG_INFO, "AdrenoToolsPatch", __VA_ARGS__)
 #define ALOGW(...) __android_log_print(ANDROID_LOG_WARN, "AdrenoToolsPatch", __VA_ARGS__)
@@ -383,6 +384,8 @@ static void init_turnip_driver(JNIEnv* env, jobject context) {
 
 	adrenotools_set_turbo(true);
 
+	setpriority(PRIO_PROCESS, 0, -20); 
+
     if (gipa_stub)
         ALOGI("ShadowHook: Turnip hooks installed successfully");
     else
@@ -400,13 +403,15 @@ __attribute__((constructor))
 static void global_atomic_init() {
     setenv("MESA_VK_VERSION_OVERRIDE", "1.3", 1);
     setenv("MESA_VULKAN_ICD_SELECT", "turnip", 1);
-    setenv("TU_DEBUG", "nolrz,noconfirm,noflushall,binning_pass,noubwc", 1);
+    setenv("TU_DEBUG", "nolrz,noconfirm,noflushall,binning_pass,noubwc,perfcntrs", 1);
     setenv("MESA_VK_IGNORE_CONFORMANCE_WARNING", "true", 1);
     setenv("MESA_VK_DEVICE_SELECT_FORCE_DEFAULT_DEVICE", "1", 1);
 	setenv("MESA_VK_WSI_PRESENT_MODE", "immediate", 1);
     setenv("MESA_NO_ERROR", "1", 1);
     setenv("MESA_GLSL_CACHE_MAX_SIZE", "1G", 1);
 	setenv("IR3_SHADER_DEBUG", "nopreamble", 1);
+	setenv("ADRENO_TURBO", "1", 1);
+	setenv("KGSL_CONTEXT_PRIORITY", "1", 1);
     
     setenv("GALLIUM_PRINT_OPTIONS", "0", 1);
     setenv("FD_DEV_FEATURES", "enable_tp_ubwc_flag_hint=1", 1);
