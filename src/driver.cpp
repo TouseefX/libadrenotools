@@ -317,45 +317,41 @@ static char* get_native_library_dir(JNIEnv* env, jobject context) {
 }
 
 void applyTurnipOptimizations() {
-    VkApplicationInfo appInfo = {};
-    appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    appInfo.apiVersion = VK_API_VERSION_1_0;
+    void* libvulkan = dlopen("libvulkan.so", RTLD_NOW);
+    if (!libvulkan) return;
+	
+    auto pfnCreateInstance = (PFN_vkCreateInstance)dlsym(libvulkan, "vkCreateInstance");
+    auto pfnEnumeratePhysicalDevices = (PFN_vkEnumeratePhysicalDevices)dlsym(libvulkan, "vkEnumeratePhysicalDevices");
+    auto pfnGetPhysicalDeviceProperties = (PFN_vkGetPhysicalDeviceProperties)dlsym(libvulkan, "vkGetPhysicalDeviceProperties");
+    auto pfnDestroyInstance = (PFN_vkDestroyInstance)dlsym(libvulkan, "vkDestroyInstance");
 
-    VkInstanceCreateInfo createInfo = {};
-    createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    createInfo.pApplicationInfo = &appInfo;
-
+    if (!pfnCreateInstance || !pfnEnumeratePhysicalDevices) {
+        dlclose(libvulkan);
+        return;
+    }
+	
     VkInstance tempInstance;
-    if (vkCreateInstance(&createInfo, nullptr, &tempInstance) != VK_SUCCESS) return;
-	
-    uint32_t deviceCount = 0;
-    vkEnumeratePhysicalDevices(tempInstance, &deviceCount, nullptr);
-    std::vector<VkPhysicalDevice> devices(deviceCount);
-    vkEnumeratePhysicalDevices(tempInstance, &deviceCount, devices.data());
+    VkInstanceCreateInfo createInfo = { VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO };
+    if (pfnCreateInstance(&createInfo, nullptr, &tempInstance) == VK_SUCCESS) {
+        uint32_t count = 0;
+        pfnEnumeratePhysicalDevices(tempInstance, &count, nullptr);
+        if (count > 0) {
+            std::vector<VkPhysicalDevice> devices(count);
+            pfnEnumeratePhysicalDevices(tempInstance, &count, devices.data());
 
-    std::string flags = "noconform,noflushall";
-    bool found7xx = false;
-
-    for (const auto& device : devices) {
-        VkPhysicalDeviceProperties props;
-        vkGetPhysicalDeviceProperties(device, &props);
-        std::string name(props.deviceName);
-		
-        if (name.find("Adreno (TM) 7") != std::string::npos) {
-            found7xx = true;
-            break;
+            VkPhysicalDeviceProperties props;
+            pfnGetPhysicalDeviceProperties(devices[0], &props);
+            
+            std::string name(props.deviceName);
+            if (name.find("Adreno (TM) 7") != std::string::npos) {
+                setenv("TU_DEBUG", "gmem,noconfirm,noflushall", 1);
+            } else {
+                setenv("TU_DEBUG", "sysmem,noconfirm,noflushall", 1);
+            }
         }
+        pfnDestroyInstance(tempInstance, nullptr);
     }
-	
-    if (found7xx) {
-        flags = "gmem," + flags;
-    } else {
-        flags = "sysmem," + flags;
-    }
-	
-    setenv("TU_DEBUG", flags.c_str(), 1);
-	
-    vkDestroyInstance(tempInstance, nullptr);
+    dlclose(libvulkan);
 }
 
 static void init_turnip_driver(JNIEnv* env, jobject context) {
