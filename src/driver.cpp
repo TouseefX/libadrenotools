@@ -344,9 +344,11 @@ void applyTurnipOptimizations() {
             
             std::string name(props.deviceName);
             if (name.find("Adreno (TM) 7") != std::string::npos) {
+				ALOGI("Use Gmem");
                 setenv("TU_DEBUG", "gmem,noconfirm,noflushall", 1);
             } else {
                 setenv("TU_DEBUG", "sysmem,noconfirm,noflushall", 1);
+                ALOGI("Use System Memory");
             }
         }
         pfnDestroyInstance(tempInstance, nullptr);
