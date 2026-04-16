@@ -347,7 +347,7 @@ void applyTurnipOptimizations() {
 				ALOGI("Use Gmem");
                 setenv("TU_DEBUG", "gmem,noconfirm,noflushall", 1);
             } else {
-                setenv("TU_DEBUG", "sysmem,noconfirm,noflushall,lowprecision,nolrz,push_common_with_dma,disable_gmem_load", 1);
+                setenv("TU_DEBUG", "sysmem,noconfirm,noflushall,lowprecision,nolrz,nothrow", 1);
                 ALOGI("Use System Memory");
             }
         }
