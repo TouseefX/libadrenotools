@@ -347,7 +347,7 @@ void applyTurnipOptimizations() {
 				ALOGI("Use Gmem");
                 setenv("TU_DEBUG", "gmem,noconfirm,noflushall", 1);
             } else {
-                setenv("TU_DEBUG", "sysmem,noconfirm,noflushall", 1);
+                setenv("TU_DEBUG", "sysmem,noconfirm,noflushall,lowprecision,nolrz", 1);
                 ALOGI("Use System Memory");
             }
         }
@@ -448,7 +448,8 @@ static void global_atomic_init() {
     setenv("MESA_VK_DEVICE_SELECT_FORCE_DEFAULT_DEVICE", "1", 1);
 	setenv("MESA_VK_WSI_PRESENT_MODE", "immediate", 1);
     setenv("MESA_NO_ERROR", "1", 1);
-    setenv("MESA_GLSL_CACHE_MAX_SIZE", "1G", 1);
+	setenv("MESA_GLSL_CACHE_DISABLE", "false", 1);
+    setenv("MESA_GLSL_CACHE_MAX_SIZE", "256M", 1);
 	setenv("ADRENO_TURBO", "1", 1);
 	setenv("KGSL_CONTEXT_PRIORITY", "1", 1);
     setenv("FD_DEV_FEATURES", "enable_tp_ubwc_flag_hint=1", 1);
