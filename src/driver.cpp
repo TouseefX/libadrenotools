@@ -31,6 +31,8 @@
 #include <mutex>
 #include <bytehook.h>
 #include <sys/resource.h>
+#include <sys/system_properties.h>
+#include <iostream>
 
 #define ALOGI(...) __android_log_print(ANDROID_LOG_INFO, "AdrenoToolsPatch", __VA_ARGS__)
 #define ALOGW(...) __android_log_print(ANDROID_LOG_WARN, "AdrenoToolsPatch", __VA_ARGS__)
@@ -314,6 +316,48 @@ static char* get_native_library_dir(JNIEnv* env, jobject context) {
     return native_libdir;
 }
 
+void applyTurnipOptimizations() {
+    VkApplicationInfo appInfo = {};
+    appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+    appInfo.apiVersion = VK_API_VERSION_1_0;
+
+    VkInstanceCreateInfo createInfo = {};
+    createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+    createInfo.pApplicationInfo = &appInfo;
+
+    VkInstance tempInstance;
+    if (vkCreateInstance(&createInfo, nullptr, &tempInstance) != VK_SUCCESS) return;
+	
+    uint32_t deviceCount = 0;
+    vkEnumeratePhysicalDevices(tempInstance, &deviceCount, nullptr);
+    std::vector<VkPhysicalDevice> devices(deviceCount);
+    vkEnumeratePhysicalDevices(tempInstance, &deviceCount, devices.data());
+
+    std::string flags = "noconform,noflushall";
+    bool found7xx = false;
+
+    for (const auto& device : devices) {
+        VkPhysicalDeviceProperties props;
+        vkGetPhysicalDeviceProperties(device, &props);
+        std::string name(props.deviceName);
+		
+        if (name.find("Adreno (TM) 7") != std::string::npos) {
+            found7xx = true;
+            break;
+        }
+    }
+	
+    if (found7xx) {
+        flags = "gmem," + flags;
+    } else {
+        flags = "sysmem," + flags;
+    }
+	
+    setenv("TU_DEBUG", flags.c_str(), 1);
+	
+    vkDestroyInstance(tempInstance, nullptr);
+}
+
 static void init_turnip_driver(JNIEnv* env, jobject context) {
     std::lock_guard<std::mutex> lock(g_init_mutex);
     if (g_turnip_handle != nullptr) {
@@ -402,7 +446,6 @@ cleanup:
 __attribute__((constructor))
 static void global_atomic_init() {
     setenv("MESA_VULKAN_ICD_SELECT", "turnip", 1);
-    setenv("TU_DEBUG", "noconfirm,noflushall", 1);
     setenv("MESA_VK_IGNORE_CONFORMANCE_WARNING", "true", 1);
     setenv("MESA_VK_DEVICE_SELECT_FORCE_DEFAULT_DEVICE", "1", 1);
 	setenv("MESA_VK_WSI_PRESENT_MODE", "immediate", 1);
@@ -419,6 +462,8 @@ static void global_atomic_init() {
     setenv("UNITY_VULKAN_FORCE_DEVICE_INDEX", "0", 1);
     setenv("UNITY_VULKAN_DISABLE_PREPASS", "0", 1);
     setenv("gfx-enable-gfx-jobs", "1", 1);
+
+	applyTurnipOptimizations();
 
     shadowhook_init(SHADOWHOOK_MODE_SHARED, true);
 }
