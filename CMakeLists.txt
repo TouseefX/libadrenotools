@@ -39,8 +39,6 @@ set(LIB_SOURCES src/bcenabler.cpp
 
 add_library(adrenotools ${LIB_SOURCES})
 
-find_package(Vulkan REQUIRED)
-
 target_include_directories(adrenotools PUBLIC include)
 target_include_directories(adrenotools PRIVATE .)
 target_include_directories(adrenotools PRIVATE 
@@ -48,7 +46,7 @@ target_include_directories(adrenotools PRIVATE
     ${bytehook_SOURCE_DIR}/bytehook/src/main/cpp/include
 )
 target_compile_options(adrenotools PRIVATE -Wall -Wextra)
-target_link_libraries(adrenotools android -Wl,--whole-archive linkernsbypass -Wl,--no-whole-archive shadowhook bytehook Vulkan::Vulkan)
+target_link_libraries(adrenotools android -Wl,--whole-archive linkernsbypass -Wl,--no-whole-archive shadowhook bytehook vulkan)
 
 set_target_properties(adrenotools PROPERTIES
     CXX_STANDARD 17
