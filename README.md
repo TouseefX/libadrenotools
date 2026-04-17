@@ -18,6 +18,7 @@ this phone used to be a cry baby when I play jump showdown now its not lol
 Tested with Roblox with Turniup MrPurple T24 AXxx S20 Ultra 5G (Vulkan)
 
 what did bro feed this driver its too fast and no overheating prob because Snapdragon 865 is balanced
+
 3 hours and no overheating and no performance drop until it got to 15% ofc
 
 ### Adreno Tools 
