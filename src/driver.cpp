@@ -446,7 +446,7 @@ static void global_atomic_init() {
     setenv("MESA_VULKAN_ICD_SELECT", "turnip", 1);
     setenv("MESA_VK_IGNORE_CONFORMANCE_WARNING", "true", 1);
     setenv("MESA_VK_DEVICE_SELECT_FORCE_DEFAULT_DEVICE", "1", 1);
-	setenv("MESA_VK_WSI_PRESENT_MODE", "mailbox", 1);
+	setenv("MESA_VK_WSI_PRESENT_MODE", "immediate", 1);
     setenv("MESA_NO_ERROR", "1", 1);
 	setenv("MESA_GLSL_CACHE_DISABLE", "false", 1);
     setenv("MESA_GLSL_CACHE_MAX_SIZE", "256M", 1);
