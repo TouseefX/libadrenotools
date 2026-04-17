@@ -16,6 +16,7 @@ unlike the note verison this one was at maximum and has better performance but i
 this phone used to be a cry baby when I play jump showdown now its not lol
 
 Tested with Roblox with Turniup MrPurple T24 AXxx S20 Ultra 5G (Vulkan)
+
 what did bro feed this driver its too fast and no overheating prob because Snapdragon 865 is balanced 
 
 ### Adreno Tools 
