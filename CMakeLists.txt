@@ -1,13 +1,3 @@
-macro(add_library name)
-    set(_args ${ARGN})
-    list(REMOVE_ITEM _args SHARED)
-    if(NOT "${name}" STREQUAL "adrenotools")
-        _add_library(${name} STATIC ${_args})
-    else()
-        _add_library(${name} SHARED ${_args})
-    endif()
-endmacro()
-
 cmake_minimum_required(VERSION 3.14...4.3)
 
 if(NOT ${CMAKE_ANDROID_ARCH_ABI} STREQUAL arm64-v8a)
@@ -23,7 +13,18 @@ set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 add_subdirectory(lib/linkernsbypass)
+
+macro(add_library name type)
+  if("${type}" STREQUAL "SHARED")
+    _add_library(${name} STATIC ${ARGN})
+  else()
+    _add_library(${name} ${type} ${ARGN})
+  endif()
+endmacro()
+
 add_subdirectory(lib/ShadowHook/shadowhook/src/main/cpp shadowhook_build)
+
+set_target_properties(shadowhook PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 if(TARGET shadowhook AND NOT TARGET shadowhook::shadowhook)
     add_library(shadowhook::shadowhook ALIAS shadowhook)
