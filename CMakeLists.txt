@@ -55,7 +55,6 @@ target_link_libraries(adrenotools
         linkernsbypass 
         shadowhook 
         bytehook 
-        # Add your other 2 internal hook libraries here (e.g. main_hook, hook_impl)
         main_hook
         hook_impl
     -Wl,--no-whole-archive
