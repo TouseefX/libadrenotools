@@ -46,7 +46,7 @@ target_include_directories(adrenotools PRIVATE
     ${bytehook_SOURCE_DIR}/bytehook/src/main/cpp/include
 )
 target_compile_options(adrenotools PRIVATE -Wall -Wextra)
-target_link_libraries(adrenotools android -Wl,--whole-archive linkernsbypass -Wl,--no-whole-archive shadowhook bytehook vulkan)
+target_link_libraries(adrenotools android -Wl,--whole-archive linkernsbypass shadowhook bytehook -Wl,--no-whole-archive vulkan)
 
 set_target_properties(adrenotools PROPERTIES
     CXX_STANDARD 17
