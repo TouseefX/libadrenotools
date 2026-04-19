@@ -278,22 +278,19 @@ static void* hooked_android_dlopen_ext(
     const android_dlextinfo* extinfo)
 {
     BYTEHOOK_STACK_SCOPE();
-	
-    void* caller = __builtin_return_address(0);
-    Dl_info caller_info{};
-    if (dladdr(caller, &caller_info) && caller_info.dli_fname) {
-        if (strstr(caller_info.dli_fname, "libhook_impl") ||
-            strstr(caller_info.dli_fname, "libadrenotools") ||
-            strstr(caller_info.dli_fname, "linker64") ||
-            strstr(caller_info.dli_fname, "libnativeloader")) {
+
+    // Safe caller check using bytehook's own macro
+    Dl_info info{};
+    void* caller = BYTEHOOK_RETURN_ADDRESS();
+    if (dladdr(caller, &info) && info.dli_fname) {
+        if (strstr(info.dli_fname, "libhook_impl") ||
+            strstr(info.dli_fname, "libadrenotools") ||
+            strstr(info.dli_fname, "libnativeloader") ||
+            strstr(info.dli_fname, "linker64")) {
             return real_android_dlopen_ext(filename, flags, extinfo);
         }
     }
-	
-    if (extinfo && (extinfo->flags & ANDROID_DLEXT_USE_NAMESPACE)) {
-        return real_android_dlopen_ext(filename, flags, extinfo);
-    }
-	
+
     if (filename && strstr(filename, "libvulkan.so") && g_turnip_handle) {
         ALOGI("android_dlopen_ext intercepted: %s → Turnip", filename);
         return g_turnip_handle;
@@ -305,11 +302,11 @@ static void* hooked_android_dlopen_ext(
 static void* hooked_dlopen(const char* filename, int flags) {
     BYTEHOOK_STACK_SCOPE();
 
-    void* caller = __builtin_return_address(0);
-    Dl_info caller_info{};
-    if (dladdr(caller, &caller_info) && caller_info.dli_fname) {
-        if (strstr(caller_info.dli_fname, "libhook_impl") ||
-            strstr(caller_info.dli_fname, "libadrenotools")) {
+    Dl_info info{};
+    void* caller = BYTEHOOK_RETURN_ADDRESS();
+    if (dladdr(caller, &info) && info.dli_fname) {
+        if (strstr(info.dli_fname, "libhook_impl") ||
+            strstr(info.dli_fname, "libadrenotools")) {
             return real_dlopen(filename, flags);
         }
     }
