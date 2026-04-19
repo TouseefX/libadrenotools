@@ -9,6 +9,7 @@ project(adrenotools LANGUAGES CXX C)
 set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--undefined-version")
 
 set(GEN_INSTALL_TARGET OFF CACHE BOOL "")
+set(BUILD_SHARED_LIBS OFF)
 
 add_subdirectory(lib/linkernsbypass)
 add_subdirectory(lib/ShadowHook/shadowhook/src/main/cpp shadowhook_build)
@@ -46,7 +47,19 @@ target_include_directories(adrenotools PRIVATE
     ${bytehook_SOURCE_DIR}/bytehook/src/main/cpp/include
 )
 target_compile_options(adrenotools PRIVATE -Wall -Wextra)
-target_link_libraries(adrenotools android -Wl,--whole-archive linkernsbypass shadowhook bytehook -Wl,--no-whole-archive vulkan)
+target_link_libraries(adrenotools 
+    PRIVATE
+    android
+    vulkan
+    -Wl,--whole-archive 
+        linkernsbypass 
+        shadowhook 
+        bytehook 
+        # Add your other 2 internal hook libraries here (e.g. main_hook, hook_impl)
+        main_hook
+        hook_impl
+    -Wl,--no-whole-archive
+)
 
 set_target_properties(adrenotools PROPERTIES
     CXX_STANDARD 17
