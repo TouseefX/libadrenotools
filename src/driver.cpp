@@ -272,9 +272,14 @@ static std::once_flag g_init_flag;
 static JavaVM* g_java_vm = nullptr;
 static void* (*real_dlopen)(const char*, int) = nullptr;
 static void* (*real_android_dlopen_ext)(const char*, int, const android_dlextinfo*) = nullptr;
+static thread_local bool g_in_hook = false;
 
 static void* hooked_dlopen(const char* filename, int flags) {
     BYTEHOOK_STACK_SCOPE();
+	
+    if (g_in_hook) {
+        return real_dlopen(filename, flags);
+    }
 
     if (filename && strstr(filename, "libvulkan.so")) {
         if (g_turnip_handle) {
@@ -283,8 +288,10 @@ static void* hooked_dlopen(const char* filename, int flags) {
         }
     }
 
-    // Use saved real pointer instead of BYTEHOOK_CALL_PREV
-    return real_dlopen(filename, flags);
+    g_in_hook = true;
+    void* result = real_dlopen(filename, flags);
+    g_in_hook = false;
+    return result;
 }
 
 static void* hooked_android_dlopen_ext(
@@ -292,17 +299,24 @@ static void* hooked_android_dlopen_ext(
     const android_dlextinfo* extinfo)
 {
     BYTEHOOK_STACK_SCOPE();
+	
+    if (g_in_hook) {
+        return real_android_dlopen_ext(filename, flags, extinfo);
+    }
 
     if (filename && strstr(filename, "libvulkan.so")) {
         if (g_turnip_handle) {
-            ALOGI("android_dlopen_ext intercepted → Turnip");
+            ALOGI("android_dlopen_ext intercepted: %s → Turnip", filename);
             return g_turnip_handle;
         }
     }
 
-    // Use saved real pointer instead of BYTEHOOK_CALL_PREV
-    return real_android_dlopen_ext(filename, flags, extinfo);
+    g_in_hook = true;
+    void* result = real_android_dlopen_ext(filename, flags, extinfo);
+    g_in_hook = false;
+    return result;
 }
+
 static PFN_vkVoidFunction hooked_vkGetInstanceProcAddr(VkInstance instance, const char* pName) {
     if (g_turnip_gipa) {
         auto func = g_turnip_gipa(instance, pName);
