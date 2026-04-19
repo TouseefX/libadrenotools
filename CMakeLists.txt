@@ -14,16 +14,14 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 add_subdirectory(lib/linkernsbypass)
 
-function(add_library name)
-    set(args "${ARGN}")
-	
-    if(NOT "${name}" STREQUAL "adrenotools")
-        list(REMOVE_ITEM args SHARED)
-        cmake_language(CALL _add_library ${name} STATIC ${args})
-    else()
-        cmake_language(CALL _add_library ${name} ${ARGN})
-    endif()
-endfunction()
+macro(add_library name type)
+  if("${type}" STREQUAL "SHARED" AND NOT "${name}" STREQUAL "adrenotools")
+    _add_library(${name} STATIC ${ARGN})
+  else()
+    # Otherwise (for adrenotools), keep the original type (SHARED)
+    _add_library(${name} ${type} ${ARGN})
+  endif()
+endmacro()
 
 add_subdirectory(lib/ShadowHook/shadowhook/src/main/cpp shadowhook_build)
 
