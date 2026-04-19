@@ -48,15 +48,16 @@ target_include_directories(adrenotools PRIVATE
 )
 target_compile_options(adrenotools PRIVATE -Wall -Wextra)
 target_link_libraries(adrenotools 
-    PRIVATE
-    android
+    android 
     vulkan
     -Wl,--whole-archive 
         linkernsbypass 
         shadowhook 
-        bytehook 
+        bytehook
         main_hook
         hook_impl
+        file_redirect_hook
+        gsl_alloc_hook
     -Wl,--no-whole-archive
 )
 
