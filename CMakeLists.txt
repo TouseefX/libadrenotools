@@ -15,7 +15,7 @@ set(FORCE_STATIC_PLZ ON)
 
 add_subdirectory(lib/linkernsbypass)
 
-function(add_library name)
+function(add_library name type)
     if(FORCE_STATIC_PLZ AND NOT "${name}" STREQUAL "adrenotools")
         set(args "${ARGN}")
         list(REMOVE_ITEM args SHARED)
