@@ -46,8 +46,6 @@ set(LIB_SOURCES src/bcenabler.cpp
                 include/adrenotools/driver.h
                 include/adrenotools/priv.h)
 
-_unset_command(add_library)
-
 macro(add_library)
     _add_library(${ARGV})
 endmacro()
