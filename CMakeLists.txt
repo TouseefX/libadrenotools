@@ -43,14 +43,6 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(bytehook)
 
-if(TARGET shadowhook)
-    set_target_properties(shadowhook PROPERTIES TYPE STATIC)
-endif()
-
-if(TARGET bytehook)
-    set_target_properties(bytehook PROPERTIES TYPE STATIC)
-endif()
-
 set(LIB_SOURCES src/bcenabler.cpp
                 src/driver.cpp
                 include/adrenotools/bcenabler.h
