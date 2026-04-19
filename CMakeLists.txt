@@ -1,3 +1,13 @@
+macro(add_library name)
+    set(_args ${ARGN})
+    list(REMOVE_ITEM _args SHARED)
+    if(NOT "${name}" STREQUAL "adrenotools")
+        _add_library(${name} STATIC ${_args})
+    else()
+        _add_library(${name} SHARED ${_args})
+    endif()
+endmacro()
+
 cmake_minimum_required(VERSION 3.14...4.3)
 
 if(NOT ${CMAKE_ANDROID_ARCH_ABI} STREQUAL arm64-v8a)
