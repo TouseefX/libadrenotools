@@ -272,28 +272,42 @@ static std::once_flag g_init_flag;
 static JavaVM* g_java_vm = nullptr;
 static void* (*real_dlopen)(const char*, int) = nullptr;
 static void* (*real_android_dlopen_ext)(const char*, int, const android_dlextinfo*) = nullptr;
-static thread_local bool manual_lock = false;
+static thread_local bool g_manual_lock = false;
+static bool g_allow_hooks = false;
 
 static void* hooked_android_dlopen_ext(
     const char* filename, int flags,
     const android_dlextinfo* extinfo)
 {
-    if (manual_lock) return real_android_dlopen_ext(filename, flags, extinfo);
-    manual_lock = true;
+	BYTEHOOK_STACK_SCOPE();
+
+	if (!g_allow_hooks) return real_android_dlopen_ext(filename, flags, extinfo);
+    if (g_manual_lock) return real_android_dlopen_ext(filename, flags, extinfo);
+    
+    g_manual_lock = true;
 	
-    if (filename != nullptr) {
-        if (strstr(filename, "libvulkan.so") != nullptr && g_turnip_handle != nullptr) {
-            manual_lock = false;
-            return g_turnip_handle;
+    void* caller = BYTEHOOK_RETURN_ADDRESS();
+    Dl_info info{};
+    if (dladdr(caller, &info) && info.dli_fname) {
+        if (strstr(info.dli_fname, "libhook_impl") ||
+            strstr(info.dli_fname, "libadrenotools") ||
+            strstr(info.dli_fname, "linker") ||
+            strstr(info.dli_fname, "libc.so")) {
+            
+            g_manual_lock = false;
+            return real_android_dlopen_ext(filename, flags, extinfo);
         }
     }
 	
-    void* result = real_android_dlopen_ext(filename, flags, extinfo);
-    
-    manual_lock = false;
-    return result;
+    if (filename && strstr(filename, "libvulkan.so") && g_turnip_handle) {
+        g_manual_lock = false;
+        return g_turnip_handle;
+    }
+	
+    void* res = real_android_dlopen_ext(filename, flags, extinfo);
+    g_manual_lock = false; 
+    return res;
 }
-
 
 static void* hooked_dlopen(const char* filename, int flags) {
     BYTEHOOK_STACK_SCOPE();
@@ -445,7 +459,7 @@ static void init_turnip_driver(JNIEnv* env, jobject context) {
         NULL,
         NULL
     );
-
+	
     if (!g_turnip_handle) {
         ALOGE("Failed to load Turnip via adrenotools");
         goto cleanup;
@@ -464,6 +478,8 @@ static void init_turnip_driver(JNIEnv* env, jobject context) {
     }
 
     ALOGI("Turnip loaded, setting up hooks...");
+
+	g_allow_hooks = true;
 
 	bytehook_hook_all(NULL, "dlopen", (void*)hooked_dlopen, NULL, NULL);
     bytehook_hook_all(NULL, "android_dlopen_ext", (void*)hooked_android_dlopen_ext, NULL, NULL);
