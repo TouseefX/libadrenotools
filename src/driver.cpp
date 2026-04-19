@@ -561,18 +561,7 @@ void perform_init(JavaVM* vm) {
     }
 }
 
-extern "C" jint shadowhook_JNI_OnLoad(JavaVM* vm, void* reserved);
-extern "C" jint bytehook_JNI_OnLoad(JavaVM* vm, void* reserved);
-
 extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* reserved) {
-	if (shadowhook_JNI_OnLoad(vm, reserved) == JNI_ERR) {
-        return JNI_ERR;
-    }
-	
-    if (bytehook_JNI_OnLoad(vm, reserved) == JNI_ERR) {
-        return JNI_ERR;
-	}
-	
     g_java_vm = vm;
     std::call_once(g_init_flag, perform_init, vm);
     return JNI_VERSION_1_6;
