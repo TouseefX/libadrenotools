@@ -13,16 +13,6 @@ set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 add_subdirectory(lib/linkernsbypass)
-
-macro(add_library name type)
-  if("${type}" STREQUAL "SHARED" AND NOT "${name}" STREQUAL "adrenotools")
-    _add_library(${name} STATIC ${ARGN})
-  else()
-    # Otherwise (for adrenotools), keep the original type (SHARED)
-    _add_library(${name} ${type} ${ARGN})
-  endif()
-endmacro()
-
 add_subdirectory(lib/ShadowHook/shadowhook/src/main/cpp shadowhook_build)
 
 if(TARGET shadowhook AND NOT TARGET shadowhook::shadowhook)
@@ -65,15 +55,8 @@ target_link_libraries(adrenotools
     android 
     vulkan
 	-Wl,--allow-multiple-definition
-    -Wl,--whole-archive 
-        linkernsbypass 
-        shadowhook 
-        bytehook
-        main_hook
-        hook_impl
-        file_redirect_hook
-        gsl_alloc_hook
-    -Wl,--no-whole-archive
+    -Wl,--whole-archive linkernsbypass main_hook hook_impl file_redirect_hook gsl_alloc_hook
+    -Wl,--no-whole-archive shadowhook bytehook
 )
 
 set_target_properties(adrenotools PROPERTIES
