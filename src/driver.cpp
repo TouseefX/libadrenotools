@@ -269,6 +269,38 @@ static PFN_vkGetInstanceProcAddr g_turnip_gipa = NULL;
 static PFN_vkGetDeviceProcAddr g_turnip_gdpa = nullptr;
 static std::once_flag g_init_flag;
 static JavaVM* g_java_vm = nullptr;
+static void* (*real_dlopen)(const char*, int) = nullptr;
+static void* (*real_android_dlopen_ext)(const char*, int, const android_dlextinfo*) = nullptr;
+
+static void* hooked_dlopen(const char* filename, int flags) {
+    BYTEHOOK_STACK_SCOPE(); // RAII cleanup, always first line
+
+    if (filename && strstr(filename, "libvulkan.so")) {
+        if (g_turnip_handle) {
+            ALOGI("dlopen intercepted: %s → Turnip", filename);
+            return g_turnip_handle;
+        }
+    }
+
+    // Call original via macro instead of real_dlopen pointer
+    return BYTEHOOK_CALL_PREV(hooked_dlopen, filename, flags);
+}
+
+static void* hooked_android_dlopen_ext(
+    const char* filename, int flags,
+    const android_dlextinfo* extinfo)
+{
+    BYTEHOOK_STACK_SCOPE();
+
+    if (filename && strstr(filename, "libvulkan.so")) {
+        if (g_turnip_handle) {
+            ALOGI("android_dlopen_ext intercepted → Turnip");
+            return g_turnip_handle;
+        }
+    }
+
+    return BYTEHOOK_CALL_PREV(hooked_android_dlopen_ext, filename, flags, extinfo);
+}
 
 static PFN_vkVoidFunction hooked_vkGetInstanceProcAddr(VkInstance instance, const char* pName) {
     if (g_turnip_gipa) {
@@ -421,12 +453,15 @@ static void init_turnip_driver(JNIEnv* env, jobject context) {
 
     ALOGI("Turnip loaded, setting up hooks...");
 
+	bytehook_hook_all(NULL, "dlopen", (void*)hooked_dlopen, NULL, NULL);
+    bytehook_hook_all(NULL, "android_dlopen_ext", (void*)hooked_android_dlopen_ext, NULL, NULL);
+
     gipa_stub = (PFN_vkGetInstanceProcAddr)shadowhook_hook_sym_name("libvulkan.so", "vkGetInstanceProcAddr", (void*)hooked_vkGetInstanceProcAddr, NULL);
     gdpa_stub = (PFN_vkGetDeviceProcAddr)shadowhook_hook_sym_name("libvulkan.so", "vkGetDeviceProcAddr", (void*)hooked_vkGetDeviceProcAddr, NULL);
 
 	adrenotools_set_turbo(true);
 
-	setpriority(PRIO_PROCESS, 0, -20); 
+	setpriority(PRIO_PROCESS, 0, -20);
 
     if (gipa_stub)
         ALOGI("ShadowHook: Turnip hooks installed successfully");
@@ -465,7 +500,8 @@ static void global_atomic_init() {
 
 	applyTurnipOptimizations();
 
-    shadowhook_init(SHADOWHOOK_MODE_SHARED, true);
+    shadowhook_init(SHADOWHOOK_MODE_SHARED, false);
+    bytehook_init(BYTEHOOK_MODE_MANUAL, false);
 }
 
 void perform_init(JavaVM* vm) {
