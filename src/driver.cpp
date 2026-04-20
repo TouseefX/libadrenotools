@@ -42,6 +42,8 @@
 static PFN_vkGetInstanceProcAddr gipa_stub = nullptr;
 static PFN_vkGetDeviceProcAddr   gdpa_stub = nullptr;
 
+extern "C" void init_hook_param(const void *params);
+
 void *adrenotools_open_libvulkan(int dlopenFlags, int featureFlags, const char *tmpLibDir, const char *hookLibDir, const char *customDriverDir, const char *customDriverName, const char *fileRedirectDir, void **userMappingHandle) {
     if (!linkernsbypass_load_status()) {
         ALOGE("FAILURE: Could not load linkernsbypass\n");
@@ -50,7 +52,7 @@ void *adrenotools_open_libvulkan(int dlopenFlags, int featureFlags, const char *
 
     if (android_get_device_api_level() >= 29 && !tmpLibDir)
         tmpLibDir = nullptr;
-
+	
     if (!(featureFlags & ADRENOTOOLS_DRIVER_FILE_REDIRECT) && fileRedirectDir) {
          ALOGE("FAILURE: ADRENOTOOLS_DRIVER_FILE_REDIRECT present but no file redirect folder found\n");
         return nullptr;
@@ -91,25 +93,13 @@ void *adrenotools_open_libvulkan(int dlopenFlags, int featureFlags, const char *
             return nullptr;
         }
     }
-
+	
     auto hookNs{android_create_namespace("adrenotools-libvulkan", hookLibDir, nullptr, ANDROID_NAMESPACE_TYPE_SHARED, nullptr, nullptr)};
 
     if (!linkernsbypass_link_namespace_to_default_all_libs(hookNs)) {
         return nullptr;
     }
-
-    auto hookImpl{linkernsbypass_namespace_dlopen("libhook_impl.so", RTLD_NOW, hookNs)};
-    if (!hookImpl) {
-        ALOGE("FAILURE: Couldn't preload the hook implementation\n");
-        return nullptr;
-    }
-
-    auto initHookParam{reinterpret_cast<void (*)(const void *)>(dlsym(hookImpl, "init_hook_param"))};
-    if (!initHookParam) {
-        ALOGE("FAILURE: Couldn't init hook params\n");
-        return nullptr;
-    }
-
+	
     auto importMapping{[&]() -> adrenotools_gpu_mapping * {
         if (featureFlags & ADRENOTOOLS_DRIVER_GPU_MAPPING_IMPORT) {
             adrenotools_gpu_mapping *mapping{new adrenotools_gpu_mapping{}};
@@ -120,14 +110,9 @@ void *adrenotools_open_libvulkan(int dlopenFlags, int featureFlags, const char *
             return nullptr;
         }
     }()};
-
-    initHookParam(new HookImplParams(featureFlags, tmpLibDir, hookLibDir, customDriverDir, customDriverName, fileRedirectDir, importMapping));
-
-    if (!linkernsbypass_namespace_dlopen("libmain_hook.so", RTLD_GLOBAL, hookNs)) {
-        ALOGE("FAILURE: Failed to load libvulkan into the isolated namespace\n");
-        return nullptr;
-    }
-
+	
+    init_hook_param(new HookImplParams(featureFlags, tmpLibDir, hookLibDir, customDriverDir, customDriverName, fileRedirectDir, importMapping));
+	
     return linkernsbypass_namespace_dlopen_unique("/system/lib64/libvulkan.so", tmpLibDir, dlopenFlags, hookNs);
 }
 
@@ -272,15 +257,12 @@ static std::once_flag g_init_flag;
 static JavaVM* g_java_vm = nullptr;
 static void* (*real_dlopen)(const char*, int) = nullptr;
 static void* (*real_android_dlopen_ext)(const char*, int, const android_dlextinfo*) = nullptr;
-static bool g_allow_hooks = false;
 
 static void* hooked_android_dlopen_ext(
     const char* filename, int flags,
     const android_dlextinfo* extinfo)
 {
     BYTEHOOK_STACK_SCOPE();
-	
-    if (!g_allow_hooks) return real_android_dlopen_ext(filename, flags, extinfo);
 	
     static thread_local bool inside_hook = false;
     if (inside_hook) return real_android_dlopen_ext(filename, flags, extinfo);
@@ -495,7 +477,6 @@ static void init_turnip_driver(JNIEnv* env, jobject context) {
 	setpriority(PRIO_PROCESS, 0, -20);
 
 	ALOGI("Turnip loaded, hooks loaded...");
-	g_allow_hooks = true;
 
     if (gipa_stub)
         ALOGI("ShadowHook: Turnip hooks installed successfully");
