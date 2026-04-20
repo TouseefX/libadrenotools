@@ -271,7 +271,7 @@ static PFN_vkGetDeviceProcAddr g_turnip_gdpa = nullptr;
 static std::once_flag g_init_flag;
 static JavaVM* g_java_vm = nullptr;
 static void* (*real_dlopen)(const char*, int) = nullptr;
-static void* (*real_android_dlopen_ext)(const char*, int, const android_dlextinfo*) = nullptr
+static void* (*real_android_dlopen_ext)(const char*, int, const android_dlextinfo*) = nullptr;
 static bool g_allow_hooks = false;
 
 static void* hooked_android_dlopen_ext(
