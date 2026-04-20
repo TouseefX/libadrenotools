@@ -56,8 +56,6 @@ Each individual app must explicitly make use of libadrenotools in order to load 
 
 #### How do I use this library to make \<favourite game\> use newer drivers?
 
-See previous question. It's up to the game developer to add support & use this library.
-
-You could contact them to so they add support for it; but that's out of our power.
-
 just start the libary by adding a code to the application class On Created or attach contex base part
+
+but if the application does not have these you need to tell a dev to do it for you
