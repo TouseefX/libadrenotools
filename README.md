@@ -55,9 +55,12 @@ This library is aimed at other developers.
 Each individual app must explicitly make use of libadrenotools in order to load custom drivers into an app / game.
 
 #### How do I use this library to make \<favourite game\> use newer drivers?
+add your libary to lib/arm64-v8a inside the apk and driver also
 
 just start the libary by adding a code to the application class On Created or attach contex base part
 
+rebuild the apk and sign it
+
 but if the application does not have these you need to tell a dev to do it for you
 
-but games can have anti tamping like roblox is it possible but impossible
+but games can have anti tamping like roblox so it's impossible for these games
