@@ -264,37 +264,25 @@ static void* hooked_android_dlopen_ext(
 {
     BYTEHOOK_STACK_SCOPE();
 	
-    static thread_local bool inside_hook = false;
-    if (inside_hook) return real_android_dlopen_ext(filename, flags, extinfo);
-    
-    inside_hook = true;
+    if (filename != nullptr) {
+        if (strncmp(filename, "/proc/", 6) == 0 || 
+            strstr(filename, "libhook_impl") || 
+            strstr(filename, "libadrenotools")) {
+            return real_android_dlopen_ext(filename, flags, extinfo);
+        }
+    }
 	
-    if (filename) {
-        if (strstr(filename, "libhook_impl")) {
-            inside_hook = false;
-            return real_android_dlopen_ext(filename, flags, extinfo);
-        }
-		
-        if (strstr(filename, "libvulkan.so") && g_turnip_handle) {
-            inside_hook = false;
-            return g_turnip_handle;
-        }
+    static thread_local bool is_inside = false;
+    if (is_inside || !g_allow_hooks) return real_android_dlopen_ext(filename, flags, extinfo);
+	
+    if (filename != nullptr && strstr(filename, "libvulkan.so") && g_turnip_handle) {
+        return g_turnip_handle;
     }
 
-    // 4. Expensive Caller Check (Only if needed)
-    void* caller = BYTEHOOK_RETURN_ADDRESS();
-    Dl_info info{};
-    if (dladdr(caller, &info) && info.dli_fname) {
-        if (strstr(info.dli_fname, "libhook_impl") ||
-            strstr(info.dli_fname, "libadrenotools")) {
-            inside_hook = false;
-            return real_android_dlopen_ext(filename, flags, extinfo);
-        }
-    }
-
+    is_inside = true;
     void* res = real_android_dlopen_ext(filename, flags, extinfo);
+    is_inside = false;
     
-    inside_hook = false; 
     return res;
 }
 
