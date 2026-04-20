@@ -59,3 +59,5 @@ Each individual app must explicitly make use of libadrenotools in order to load 
 just start the libary by adding a code to the application class On Created or attach contex base part
 
 but if the application does not have these you need to tell a dev to do it for you
+
+but games can have anti tamping like roblox is it possible but impossible
