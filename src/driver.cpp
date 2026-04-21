@@ -481,6 +481,7 @@ static void init_turnip_driver(JNIEnv* env, jobject context) {
     gdpa_stub = (PFN_vkGetDeviceProcAddr)shadowhook_hook_sym_name("libvulkan.so", "vkGetDeviceProcAddr", (void*)hooked_vkGetDeviceProcAddr, NULL);
 
 	#ifdef OVERCLOCK
+	    ALOGI("Enabling Overclock make sure you have a fan cooler");
 	    adrenotools_set_turbo(true);
 	    setpriority(PRIO_PROCESS, 0, -20);
 	#endif
