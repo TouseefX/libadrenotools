@@ -398,9 +398,9 @@ void applyTurnipOptimizations() {
             std::string name(props.deviceName);
             if (name.find("Adreno (TM) 7") != std::string::npos) {
 				ALOGI("Use Gmem");
-                setenv("TU_DEBUG", "gmem,noconfirm,noflushall", 1);
+                setenv("TU_DEBUG", "gmem,noconfirm", 1);
             } else {
-                setenv("TU_DEBUG", "sysmem,noconfirm,noflushall,lowprecision,nolrz,nothrow", 1);
+                setenv("TU_DEBUG", "sysmem,noconfirm,lowprecision", 1);
                 ALOGI("Use System Memory");
             }
         }
@@ -513,7 +513,7 @@ static void global_atomic_init() {
     
     setenv("GALLIUM_PRINT_OPTIONS", "0", 1);
     setenv("MESA_DEBUG", "silent", 1);
-	// setenv("vblank_mode", "0", 1);
+	setenv("vblank_mode", "0", 1);
     
     setenv("UNITY_FORCE_VULKAN", "1", 1);
     setenv("UNITY_VULKAN_FORCE_DEVICE_INDEX", "0", 1);
