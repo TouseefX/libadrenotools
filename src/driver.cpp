@@ -505,7 +505,7 @@ static void global_atomic_init() {
 	setenv("MESA_VK_WSI_PRESENT_MODE", "mailbox", 1);
     setenv("MESA_NO_ERROR", "0", 1);
 	setenv("MESA_GLSL_CACHE_DISABLE", "false", 1);
-    setenv("MESA_GLSL_CACHE_MAX_SIZE", "1G", 1);
+    setenv("MESA_GLSL_CACHE_MAX_SIZE", "512M", 1);
 	setenv("ADRENO_TURBO", "1", 1);
 	setenv("KGSL_CONTEXT_PRIORITY", "1", 1);
     setenv("FD_DEV_FEATURES", "enable_tp_ubwc_flag_hint=1", 1);
