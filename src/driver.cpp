@@ -511,6 +511,7 @@ static void global_atomic_init() {
 	setenv("MESA_VK_CACHE_CONTROL", "1", 1);
 	setenv("KGSL_CONTEXT_PRIORITY", "1", 1);
     setenv("FD_DEV_FEATURES", "enable_tp_ubwc_flag_hint=1", 1);
+	setenv("mesa_glthread", "true", 1);
     
     setenv("GALLIUM_PRINT_OPTIONS", "0", 1);
     setenv("MESA_DEBUG", "silent", 1);
