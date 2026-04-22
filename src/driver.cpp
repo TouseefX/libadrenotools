@@ -397,8 +397,13 @@ void applyTurnipOptimizations() {
             
             std::string name(props.deviceName);
             if (name.find("Adreno (TM) 7") != std::string::npos) {
-				ALOGI("Use Gmem");
-                setenv("TU_DEBUG", "gmem,noconfirm,noflushall,lowprecision", 1);
+				#ifdef OVERCLOCK
+				    ALOGI("Use Gmem");
+				    setenv("TU_DEBUG", "gmem,noconfirm,noflushall,lowprecision", 1);
+				#else
+				    ALOGI("Use Sysmem");
+				    setenv("TU_DEBUG", "sysmem,noconfirm,noflushall,lowprecision", 1);
+				#endif
             } else {
                 setenv("TU_DEBUG", "sysmem,noconfirm,noflushall,lowprecision,nolrz", 1);
                 ALOGI("Use System Memory");
@@ -504,7 +509,6 @@ static void global_atomic_init() {
     setenv("MESA_VULKAN_ICD_SELECT", "turnip", 1);
     setenv("MESA_VK_IGNORE_CONFORMANCE_WARNING", "true", 1);
     setenv("MESA_VK_DEVICE_SELECT_FORCE_DEFAULT_DEVICE", "1", 1);
-	setenv("MESA_VK_WSI_PRESENT_MODE", "mailbox", 1);
     setenv("MESA_NO_ERROR", "0", 1);
 	setenv("MESA_GLSL_CACHE_DISABLE", "false", 1);
     setenv("MESA_GLSL_CACHE_MAX_SIZE", "512M", 1);
@@ -519,6 +523,12 @@ static void global_atomic_init() {
 	    setenv("mesa_glthread", "true", 1);
 	    setenv("ADRENO_TURBO", "1", 1);
 	    setenv("vblank_mode", "0", 1);
+	    setenv("MESA_VK_WSI_PRESENT_MODE", "mailbox", 1); // don't use immediate if you want to edit this code take the risk gpu controls the system
+	#else
+	    setenv("mesa_glthread", "false", 1); // creates more heat then expected because system uses opengl
+	    setenv("ADRENO_TURBO", "0", 1);
+	    setenv("vblank_mode", "1", 1);
+	    setenv("MESA_VK_WSI_PRESENT_MODE", "fifo", 1); // Use fifo for stablely
 	#endif
     
     setenv("UNITY_FORCE_VULKAN", "1", 1);
