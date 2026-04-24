@@ -308,8 +308,8 @@ static void* hooked_dlopen(const char* filename, int flags) {
     Dl_info info{};
     if (dladdr(caller, &info) && info.dli_fname &&
         (uintptr_t)info.dli_fname > 0x1000) {  // guard against 0x1 style bad ptrs
-        if (strstr(info.dli_fname, "libhook_impl")   ||
-            strstr(info.dli_fname, "libadrenotools") {
+        if (strstr(info.dli_fname, "libhook_impl") ||
+            strstr(info.dli_fname, "libadrenotools")) {
             return real_dlopen(filename, flags);
         }
 	}
