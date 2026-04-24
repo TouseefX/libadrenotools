@@ -9,7 +9,7 @@ project(adrenotools LANGUAGES CXX C)
 option(OVERCLOCK_BUILD "Enable aggressive performance flags" OFF)
 
 if(OVERCLOCK_BUILD)
-    add_definitions(-OVERCLOCK)
+    add_compile_definitions(OVERCLOCK)
     message(STATUS "Build: Aggressive Overclock Enabled (Heat Warning!)")
 else()
     message(STATUS "Build: Stable Standard Mode")
