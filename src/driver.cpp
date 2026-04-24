@@ -279,46 +279,49 @@ static void* hooked_android_dlopen_ext(
 {
     BYTEHOOK_STACK_SCOPE();
 
-    // Safe caller check using bytehook's own macro
-    Dl_info info{};
-    void* caller = BYTEHOOK_RETURN_ADDRESS();
-    if (dladdr(caller, &info) && info.dli_fname) {
-        if (strstr(info.dli_fname, "libhook_impl") ||
-            strstr(info.dli_fname, "libadrenotools") ||
-            strstr(info.dli_fname, "libnativeloader") ||
-            strstr(info.dli_fname, "linker64")) {
-            return real_android_dlopen_ext(filename, flags, extinfo);
-        }
-    }
-
-    if (filename && (strstr(filename, "libvulkan.so") || 
-                     strstr(filename, "vulkan.adreno.so") || 
+    if (filename && (strstr(filename, "libvulkan.so") ||
+                     strstr(filename, "vulkan.adreno.so") ||
                      strstr(filename, "vulkan.msm8998.so"))) {
-		ALOGI("android_dlopen_ext intercepted: %s → Turnip", filename);
+
+        void* caller = BYTEHOOK_RETURN_ADDRESS();
+        Dl_info info{};
+        if (dladdr(caller, &info) && info.dli_fname) {
+            if (strstr(info.dli_fname, "libhook_impl")   ||
+                strstr(info.dli_fname, "libadrenotools")  ||
+                strstr(info.dli_fname, "libnativeloader") ||
+                strstr(info.dli_fname, "linker64")) {
+                return real_android_dlopen_ext(filename, flags, extinfo);
+            }
+        }
+
+        ALOGI("android_dlopen_ext intercepted: %s → Turnip", filename);
         return g_turnip_handle;
     }
-	
+
     return real_android_dlopen_ext(filename, flags, extinfo);
 }
 
 static void* hooked_dlopen(const char* filename, int flags) {
     BYTEHOOK_STACK_SCOPE();
 
-    Dl_info info{};
-    void* caller = BYTEHOOK_RETURN_ADDRESS();
-    if (dladdr(caller, &info) && info.dli_fname) {
-        if (strstr(info.dli_fname, "libhook_impl") ||
-            strstr(info.dli_fname, "libadrenotools")) {
-            return real_dlopen(filename, flags);
-        }
-    }
-
-    if (filename && (strstr(filename, "libvulkan.so") || 
-                     strstr(filename, "vulkan.adreno.so") || 
+    if (filename && (strstr(filename, "libvulkan.so") ||
+                     strstr(filename, "vulkan.adreno.so") ||
                      strstr(filename, "vulkan.msm8998.so"))) {
-		ALOGI("dlopen intercepted: %s → Turnip", filename);
+
+        void* caller = BYTEHOOK_RETURN_ADDRESS();
+        Dl_info info{};
+        if (dladdr(caller, &info) && info.dli_fname) {
+            if (strstr(info.dli_fname, "libhook_impl")   ||
+                strstr(info.dli_fname, "libadrenotools")  ||
+                strstr(info.dli_fname, "libnativeloader") ||
+                strstr(info.dli_fname, "linker64")) {
+                return real_dlopen(filename, flags);
+            }
+        }
+
+        ALOGI("dlopen intercepted: %s → Turnip", filename);
         return g_turnip_handle;
-	}
+    }
 
     return real_dlopen(filename, flags);
 }
@@ -489,6 +492,9 @@ static void init_turnip_driver(JNIEnv* env, jobject context) {
 	    ALOGI("Enabling Overclock make sure you have a fan cooler");
 	    adrenotools_set_turbo(true);
 	    setpriority(PRIO_PROCESS, 0, -20);
+	#else
+	    ALOGI("using stranded mode");
+	    adrenotools_set_turbo(false);
 	#endif
 
     if (gipa_stub)
@@ -509,26 +515,30 @@ static void global_atomic_init() {
     setenv("MESA_VULKAN_ICD_SELECT", "turnip", 1);
     setenv("MESA_VK_IGNORE_CONFORMANCE_WARNING", "true", 1);
     setenv("MESA_VK_DEVICE_SELECT_FORCE_DEFAULT_DEVICE", "1", 1);
-    setenv("MESA_NO_ERROR", "0", 1);
 	setenv("MESA_GLSL_CACHE_DISABLE", "false", 1);
     setenv("MESA_GLSL_CACHE_MAX_SIZE", "512M", 1);
 	setenv("MESA_VK_CACHE_CONTROL", "1", 1);
-	setenv("KGSL_CONTEXT_PRIORITY", "1", 1);
     setenv("FD_DEV_FEATURES", "enable_tp_ubwc_flag_hint=1", 1);
     
     setenv("GALLIUM_PRINT_OPTIONS", "0", 1);
     setenv("MESA_DEBUG", "silent", 1);
+	setenv("MESA_NO_ERROR", "1", 1);
 
 	#ifdef OVERCLOCK
+	    setenv("KGSL_CONTEXT_PRIORITY", "1", 1);
 	    setenv("mesa_glthread", "true", 1);
 	    setenv("ADRENO_TURBO", "1", 1);
 	    setenv("vblank_mode", "0", 1);
 	    setenv("MESA_VK_WSI_PRESENT_MODE", "mailbox", 1); // don't use immediate if you want to edit this code take the risk gpu controls the system
+	    setenv("TU_OVERRIDE_HEAP_SIZE", "1024", 1);
 	#else
+	    setenv("KGSL_CONTEXT_PRIORITY", "3", 1);
 	    setenv("mesa_glthread", "false", 1); // creates more heat then expected because system uses opengl
 	    setenv("ADRENO_TURBO", "0", 1);
 	    setenv("vblank_mode", "1", 1);
 	    setenv("MESA_VK_WSI_PRESENT_MODE", "fifo", 1); // Use fifo for stablely
+	    setenv("TU_OVERRIDE_HEAP_SIZE", "512", 1);
+        setenv("TU_ROBUST_BUFFER_ACCESS", "0", 1);
 	#endif
     
     setenv("UNITY_FORCE_VULKAN", "1", 1);
