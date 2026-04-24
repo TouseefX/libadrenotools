@@ -278,22 +278,22 @@ static void* hooked_android_dlopen_ext(
     const android_dlextinfo* extinfo)
 {
     BYTEHOOK_STACK_SCOPE();
+	
+    void* caller = BYTEHOOK_RETURN_ADDRESS();
+    Dl_info info{};
+    if (dladdr(caller, &info) && info.dli_fname &&
+        (uintptr_t)info.dli_fname > 0x1000) {  // guard against 0x1 style bad ptrs
+        if (strstr(info.dli_fname, "libhook_impl")   ||
+            strstr(info.dli_fname, "libadrenotools")  ||
+            strstr(info.dli_fname, "libnativeloader") ||
+            strstr(info.dli_fname, "linker64")) {
+            return real_android_dlopen_ext(filename, flags, extinfo);
+        }
+    }
 
     if (filename && (strstr(filename, "libvulkan.so") ||
                      strstr(filename, "vulkan.adreno.so") ||
                      strstr(filename, "vulkan.msm8998.so"))) {
-
-        void* caller = BYTEHOOK_RETURN_ADDRESS();
-        Dl_info info{};
-        if (dladdr(caller, &info) && info.dli_fname) {
-            if (strstr(info.dli_fname, "libhook_impl")   ||
-                strstr(info.dli_fname, "libadrenotools")  ||
-                strstr(info.dli_fname, "libnativeloader") ||
-                strstr(info.dli_fname, "linker64")) {
-                return real_android_dlopen_ext(filename, flags, extinfo);
-            }
-        }
-
         ALOGI("android_dlopen_ext intercepted: %s → Turnip", filename);
         return g_turnip_handle;
     }
@@ -304,24 +304,22 @@ static void* hooked_android_dlopen_ext(
 static void* hooked_dlopen(const char* filename, int flags) {
     BYTEHOOK_STACK_SCOPE();
 
-    if (filename && (strstr(filename, "libvulkan.so") ||
+    void* caller = BYTEHOOK_RETURN_ADDRESS();
+    Dl_info info{};
+    if (dladdr(caller, &info) && info.dli_fname &&
+        (uintptr_t)info.dli_fname > 0x1000) {  // guard against 0x1 style bad ptrs
+        if (strstr(info.dli_fname, "libhook_impl")   ||
+            strstr(info.dli_fname, "libadrenotools") {
+            return real_dlopen(filename, flags);
+        }
+	}
+
+	if (filename && (strstr(filename, "libvulkan.so") ||
                      strstr(filename, "vulkan.adreno.so") ||
                      strstr(filename, "vulkan.msm8998.so"))) {
-
-        void* caller = BYTEHOOK_RETURN_ADDRESS();
-        Dl_info info{};
-        if (dladdr(caller, &info) && info.dli_fname) {
-            if (strstr(info.dli_fname, "libhook_impl")   ||
-                strstr(info.dli_fname, "libadrenotools")  ||
-                strstr(info.dli_fname, "libnativeloader") ||
-                strstr(info.dli_fname, "linker64")) {
-                return real_dlopen(filename, flags);
-            }
-        }
-
         ALOGI("dlopen intercepted: %s → Turnip", filename);
         return g_turnip_handle;
-    }
+	}
 
     return real_dlopen(filename, flags);
 }
