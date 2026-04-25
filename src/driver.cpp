@@ -272,52 +272,42 @@ static std::once_flag g_init_flag;
 static JavaVM* g_java_vm = nullptr;
 static void* (*real_dlopen)(const char*, int) = nullptr;
 static void* (*real_android_dlopen_ext)(const char*, int, const android_dlextinfo*) = nullptr;
+static void* (*dlopen_stub)(const char*, int) = nullptr;
+static void* (*dlopen_ext_stub)(const char*, int, const android_dlextinfo*) = nullptr;
+static thread_local bool g_in_adrenotools_load = true;
 
 static void* hooked_android_dlopen_ext(
-    const char* filename, int flags,
-    const android_dlextinfo* extinfo)
+    const char* filename, int flags, const android_dlextinfo* extinfo)
 {
-    BYTEHOOK_STACK_SCOPE();
-	
-    void* caller = BYTEHOOK_RETURN_ADDRESS();
-    Dl_info info{};
-    if (dladdr(caller, &info) && info.dli_fname &&
-        (uintptr_t)info.dli_fname > 0x1000) {  // guard against 0x1 style bad ptrs
-        if (strstr(info.dli_fname, "libhook_impl")   ||
-            strstr(info.dli_fname, "libadrenotools")  ||
-            strstr(info.dli_fname, "libnativeloader") ||
-            strstr(info.dli_fname, "linker64")) {
-            return real_android_dlopen_ext(filename, flags, extinfo);
-        }
-    }
+    if (g_in_adrenotools_load)
+        return dlopen_ext_stub(filename, flags, extinfo);
 
-    if (filename && strstr(filename, "vulkan") && strstr(filename, ".so")) {
-        ALOGI("android_dlopen_ext intercepted: %s → Turnip", filename);
+    if (filename && g_turnip_handle &&
+        (strstr(filename, "libvulkan.so") ||
+         strstr(filename, "vulkan.") ||
+         strstr(filename, "/vulkan/"))) {
+
+        ALOGI("android_dlopen_ext(\"%s\") → Turnip handle", filename);
         return g_turnip_handle;
     }
 
-    return real_android_dlopen_ext(filename, flags, extinfo);
+    return dlopen_ext_stub(filename, flags, extinfo);
 }
 
 static void* hooked_dlopen(const char* filename, int flags) {
-    BYTEHOOK_STACK_SCOPE();
+    if (g_in_adrenotools_load)
+        return dlopen_stub(filename, flags);
 
-    void* caller = BYTEHOOK_RETURN_ADDRESS();
-    Dl_info info{};
-    if (dladdr(caller, &info) && info.dli_fname &&
-        (uintptr_t)info.dli_fname > 0x1000) {  // guard against 0x1 style bad ptrs
-        if (strstr(info.dli_fname, "libhook_impl") ||
-            strstr(info.dli_fname, "libadrenotools")) {
-            return real_dlopen(filename, flags);
-        }
-	}
+    if (filename && g_turnip_handle &&
+        (strstr(filename, "libvulkan.so") ||
+         strstr(filename, "vulkan.") ||
+         strstr(filename, "/vulkan/"))) {
 
-	if (filename && strstr(filename, "vulkan") && strstr(filename, ".so")) {
-        ALOGI("dlopen intercepted: %s → Turnip", filename);
+        ALOGI("dlopen(\"%s\") → Turnip handle", filename);
         return g_turnip_handle;
-	}
+    }
 
-    return real_dlopen(filename, flags);
+    return dlopen_stub(filename, flags);
 }
 
 static PFN_vkVoidFunction hooked_vkGetInstanceProcAddr(VkInstance instance, const char* pName) {
@@ -462,6 +452,8 @@ static void init_turnip_driver(JNIEnv* env, jobject context) {
         goto cleanup;
     }
 
+	g_in_adrenotools_load = false;
+
     g_turnip_gipa = (PFN_vkGetInstanceProcAddr)dlsym(g_turnip_handle, "vkGetInstanceProcAddr");
     if (!g_turnip_gipa) {
         ALOGE("Failed to get vkGetInstanceProcAddr from Turnip");
@@ -476,11 +468,12 @@ static void init_turnip_driver(JNIEnv* env, jobject context) {
 
     ALOGI("Turnip loaded, setting up hooks...");
 
-	bytehook_hook_all(NULL, "dlopen", (void*)hooked_dlopen, NULL, NULL);
-    bytehook_hook_all(NULL, "android_dlopen_ext", (void*)hooked_android_dlopen_ext, NULL, NULL);
-
     // gipa_stub = (PFN_vkGetInstanceProcAddr)shadowhook_hook_sym_name("libvulkan.so", "vkGetInstanceProcAddr", (void*)hooked_vkGetInstanceProcAddr, NULL);
     // gdpa_stub = (PFN_vkGetDeviceProcAddr)shadowhook_hook_sym_name("libvulkan.so", "vkGetDeviceProcAddr", (void*)hooked_vkGetDeviceProcAddr, NULL);
+
+	dlopen_stub = (decltype(dlopen_stub))shadowhook_hook_sym_name("libdl.so", "dlopen",(void*)hooked_dlopen, nullptr);
+    dlopen_ext_stub = (decltype(dlopen_ext_stub))shadowhook_hook_sym_name("libdl.so", "android_dlopen_ext",(void*)hooked_android_dlopen_ext, nullptr);
+    shadowhook_hook_sym_name("libc.so", "dlopen",(void*)hooked_dlopen, nullptr);
 
 	#ifdef OVERCLOCK
 	    ALOGI("Enabling Overclock make sure you have a fan cooler");
@@ -539,13 +532,7 @@ static void global_atomic_init() {
 
 	applyTurnipOptimizations();
 
-	real_dlopen = reinterpret_cast<decltype(real_dlopen)>(
-        dlsym(RTLD_DEFAULT, "dlopen"));
-    real_android_dlopen_ext = reinterpret_cast<decltype(real_android_dlopen_ext)>(
-        dlsym(RTLD_DEFAULT, "android_dlopen_ext"));
-
-    // shadowhook_init(SHADOWHOOK_MODE_SHARED, false);
-    bytehook_init(BYTEHOOK_MODE_MANUAL, false);
+    shadowhook_init(SHADOWHOOK_MODE_SHARED, false);
 }
 
 void perform_init(JavaVM* vm) {
