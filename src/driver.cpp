@@ -344,7 +344,9 @@ void applyTurnipOptimizations() {
             pfnGetPhysicalDeviceProperties(devices[0], &props);
             
             std::string name(props.deviceName);
-            if (name.find("Adreno (TM) 7") != std::string::npos) || name.find("Adreno (TM) 8") != std::string::npos) {
+            if (name.find("Adreno (TM) 7") != std::string::npos || 
+                name.find("Adreno (TM) 8") != std::string::npos) {
+				
 				#ifdef OVERCLOCK
 				    ALOGI("Use Gmem");
 				    setenv("TU_DEBUG", "gmem,noconfirm,noflushall,lowprecision", 1);
