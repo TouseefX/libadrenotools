@@ -482,10 +482,9 @@ static void global_atomic_init() {
         setenv("TU_ROBUST_BUFFER_ACCESS", "0", 1);
 	#endif
     
-    setenv("UNITY_FORCE_VULKAN", "1", 1);
-    setenv("UNITY_VULKAN_FORCE_DEVICE_INDEX", "0", 1);
-    setenv("UNITY_VULKAN_DISABLE_PREPASS", "0", 1);
-    setenv("gfx-enable-gfx-jobs", "1", 1);
+    setenv("UNITY_DISABLE_GRAPHICS_DRIVER_CHECK", "1", 1);
+    setenv("UNITY_VULKAN_ENABLE_VALIDATION_LAYERS", "0", 1);
+	setenv("UNITY_GFX_DEVICE_API", "vulkan", 1);
 
 	applyTurnipOptimizations();
 
