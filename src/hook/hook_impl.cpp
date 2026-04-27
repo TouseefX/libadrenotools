@@ -21,17 +21,6 @@ int (*gsl_memory_alloc_pure_sym)(uint32_t, uint32_t, void *);
 int (*gsl_memory_alloc_pure_64_sym)(uint64_t, uint32_t, void *);
 int (*gsl_memory_free_pure_sym)(void *);
 int kgsl_fd;
-static int (*real_system_property_get)(const char *, char *) = nullptr;
-
-static void (*real_prop_read_cb)(const prop_info *, void (*)(void *, const char *, const char *, uint32_t), void *) = nullptr;
-
-static void fake_prop_callback(void *cookie, const char *name, const char *value, uint32_t serial) {
-    const char *effective = (value && value[0]) ? value : "0";
-    auto real_cb = reinterpret_cast<void(*)(void*, const char*, const char*, uint32_t)>(
-        ((void**)cookie)[0]);
-    void *real_cookie = ((void**)cookie)[1];
-    real_cb(real_cookie, name, effective, serial);
-}
 
 using gsl_memory_alloc_pure_t = decltype(gsl_memory_alloc_pure_sym);
 using gsl_memory_alloc_pure_64_t = decltype(gsl_memory_alloc_pure_64_sym);
@@ -45,38 +34,6 @@ __attribute__((visibility("default"))) void init_gsl(void *alloc, void *alloc64,
     gsl_memory_alloc_pure_sym = reinterpret_cast<gsl_memory_alloc_pure_t>(alloc);
     gsl_memory_alloc_pure_64_sym = reinterpret_cast<gsl_memory_alloc_pure_64_t>(alloc64);
     gsl_memory_free_pure_sym = reinterpret_cast<gsl_memory_free_pure_t>(free);
-}
-
-__attribute__((visibility("default"))) int hook___system_property_get(const char *name, char *value) {
-    if (!real_system_property_get)
-        real_system_property_get = reinterpret_cast<decltype(real_system_property_get)>(
-            dlsym(RTLD_NEXT, "__system_property_get"));
-
-    int result = real_system_property_get(name, value);
-
-    // If denied (empty result) and it's a vendor prop, fake success
-    if (result == 0 && value[0] == '\0' && 
-        (strncmp(name, "vendor.", 7) == 0 || strncmp(name, "ro.vendor.", 10) == 0)) {
-        LOGI("hook___system_property_get: faking prop: %s", name);
-        value[0] = '0';
-        value[1] = '\0';
-        return 1;
-    }
-
-    return result;
-}
-
-__attribute__((visibility("default"))) void hook___system_property_read_callback(
-    const prop_info *pi,
-    void (*callback)(void *, const char *, const char *, uint32_t),
-    void *cookie) {
-
-    if (!real_prop_read_cb)
-        real_prop_read_cb = reinterpret_cast<decltype(real_prop_read_cb)>(
-            dlsym(RTLD_NEXT, "__system_property_read_callback"));
-
-    void *wrapped[] = {(void*)callback, cookie};
-    real_prop_read_cb(pi, fake_prop_callback, wrapped);
 }
 
 __attribute__((visibility("default"))) void *hook_android_dlopen_ext(const char *filename, int flags, const android_dlextinfo *extinfo) {
