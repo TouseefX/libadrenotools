@@ -410,11 +410,6 @@ void applyTurnipOptimizations() {
     dlclose(libvulkan);
 }
 
-#include <unistd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/system_properties.h>
-
 static void apply_sdk_tunables() {
     char sdk_str[8] = {};
     __system_property_get("ro.build.version.sdk", sdk_str);
