@@ -293,11 +293,11 @@ static PFN_vkVoidFunction hooked_vkGetDeviceProcAddr(VkDevice device, const char
 
 static const prop_info *fake_system_property_find(const char *name) {
     const prop_info *result = real_system_property_find(name);
-	
+
     if (!result &&
         (strncmp(name, "vendor.", 7) == 0 || strncmp(name, "ro.vendor.", 10) == 0)) {
         ALOGI("fake_system_property_find: faking denied prop: %s", name);
-        __system_property_add(name, strlen(name), "0", 1);
+        __system_property_set(name, "0");
         result = real_system_property_find(name);
     }
 
@@ -505,11 +505,7 @@ static void global_atomic_init() {
 
 	applyTurnipOptimizations();
 
-    shadowhook_init(SHADOWHOOK_MODE_SHARED, false);
-}
-
-__attribute__((destructor)) void cleanup_property_hooks() {
-    if (prop_read_cb_stub) shadowhook_unhook(prop_find_stub);
+    shadowhook_init(SHADOWHOOK_MODE_SHARED, true);
 }
 
 void perform_init(JavaVM* vm) {
