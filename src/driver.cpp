@@ -270,8 +270,6 @@ static PFN_vkGetInstanceProcAddr g_turnip_gipa = NULL;
 static PFN_vkGetDeviceProcAddr g_turnip_gdpa = nullptr;
 static std::once_flag g_init_flag;
 static JavaVM* g_java_vm = nullptr;
-static const prop_info *(*real_system_property_find)(const char *) = nullptr;
-static void *prop_find_stub = nullptr;
 
 static PFN_vkVoidFunction hooked_vkGetInstanceProcAddr(VkInstance instance, const char* pName) {
     if (g_turnip_gipa) {
@@ -289,19 +287,6 @@ static PFN_vkVoidFunction hooked_vkGetDeviceProcAddr(VkDevice device, const char
     if (gdpa_stub)
         return gdpa_stub(device, pName);
     return nullptr;
-}
-
-static const prop_info *fake_system_property_find(const char *name) {
-    const prop_info *result = real_system_property_find(name);
-
-    if (!result &&
-        (strncmp(name, "vendor.", 7) == 0 || strncmp(name, "ro.vendor.", 10) == 0)) {
-        ALOGI("fake_system_property_find: faking denied prop: %s", name);
-        __system_property_set(name, "0");
-        result = real_system_property_find(name);
-    }
-
-    return result;
 }
 
 static char* get_native_library_dir(JNIEnv* env, jobject context) {
@@ -446,8 +431,6 @@ static void init_turnip_driver(JNIEnv* env, jobject context) {
 
     gipa_stub = (PFN_vkGetInstanceProcAddr)shadowhook_hook_sym_name("libvulkan.so", "vkGetInstanceProcAddr", (void*)hooked_vkGetInstanceProcAddr, NULL);
     gdpa_stub = (PFN_vkGetDeviceProcAddr)shadowhook_hook_sym_name("libvulkan.so", "vkGetDeviceProcAddr", (void*)hooked_vkGetDeviceProcAddr, NULL);
-
-    prop_find_stub = shadowhook_hook_sym_name("libc.so", "__system_property_find", (void *)fake_system_property_find, (void **)&real_system_property_find);
 	
 	#ifdef OVERCLOCK
 	    ALOGI("Enabling Overclock make sure you have a fan cooler");
