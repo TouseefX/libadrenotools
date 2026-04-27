@@ -25,10 +25,6 @@ int hook_gsl_memory_alloc_pure_64(uint64_t size, uint32_t flags, void *memDesc);
 
 int hook_gsl_memory_free_pure(void *memDesc);
 
-int hook___system_property_get(const char *name, char *value);
-
-void hook___system_property_read_callback(const prop_info *pi, void (*callback)(void *, const char *, const char *, uint32_t), void *cookie);
-
 #ifdef __cplusplus
 }
 #endif
