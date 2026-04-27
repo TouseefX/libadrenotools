@@ -370,29 +370,29 @@ void applyTurnipOptimizations() {
             switch (gen) {
                 case AdrenoGen::A8xx:
                     // A8xx has large GMEM — so no sysmem under clock
-                    setenv("TU_DEBUG", "gmem,noconfirm,noflushall,lowprecision", 1);
+                    setenv("TU_DEBUG", "gmem,noconfirm,noflushall,lowprecision,perf", 1);
                     ALOGI("A8xx: gmem rendering enabled");
                     break;
 
                 case AdrenoGen::A7xx:
                     // A7xx: gmem benefits in overclock; sysmem is cooler at stock.
                #ifdef OVERCLOCK
-                    setenv("TU_DEBUG", "gmem,noconfirm,noflushall,lowprecision", 1);
+                    setenv("TU_DEBUG", "gmem,noconfirm,noflushall,lowprecision,perf", 1);
                     ALOGI("A7xx OC: gmem rendering");
                #else
-                    setenv("TU_DEBUG", "sysmem,noconfirm,noflushall,lowprecision", 1);
+                    setenv("TU_DEBUG", "sysmem,noconfirm,noflushall,lowprecision,perf", 1);
                     ALOGI("A7xx stock: sysmem rendering");
                #endif
                     break;
 
                 case AdrenoGen::A6xx:
-                    setenv("TU_DEBUG", "sysmem,noconfirm,noflushall,lowprecision", 1);
+                    setenv("TU_DEBUG", "sysmem,noconfirm,noflushall,lowprecision,perf", 1);
                     ALOGI("A6xx: sysmem rendering");
                     break;
 
                 case AdrenoGen::A5xx:
                     // A5xx: no UBWC, no reliable LRZ
-                    setenv("TU_DEBUG", "sysmem,noconfirm,nolrz", 1);
+                    setenv("TU_DEBUG", "sysmem,noconfirm,nolrz,perf", 1);
                     setenv("FD_DEV_FEATURES", "", 1);   // clear UBWC hint, not supported
                     ALOGI("A5xx: conservative sysmem, UBWC disabled");
                     break;
