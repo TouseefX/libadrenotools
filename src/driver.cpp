@@ -270,12 +270,8 @@ static PFN_vkGetInstanceProcAddr g_turnip_gipa = NULL;
 static PFN_vkGetDeviceProcAddr g_turnip_gdpa = nullptr;
 static std::once_flag g_init_flag;
 static JavaVM* g_java_vm = nullptr;
-static void *prop_get_stub = nullptr;
-static void *prop_read_cb_stub = nullptr;
-
-static int (*real_system_property_get)(const char *, char *) = nullptr;
-static void (*real_system_property_read_callback)(
-    const prop_info *, void (*)(void *, const char *, const char *, uint32_t), void *) = nullptr;
+static const prop_info *(*real_system_property_find)(const char *) = nullptr;
+static void *prop_find_stub = nullptr;
 
 static PFN_vkVoidFunction hooked_vkGetInstanceProcAddr(VkInstance instance, const char* pName) {
     if (g_turnip_gipa) {
@@ -295,34 +291,17 @@ static PFN_vkVoidFunction hooked_vkGetDeviceProcAddr(VkDevice device, const char
     return nullptr;
 }
 
-static int fake_system_property_get(const char *name, char *value) {
-    int result = real_system_property_get(name, value);
-
-    if (result == 0 && value[0] == '\0' &&
+static const prop_info *fake_system_property_find(const char *name) {
+    const prop_info *result = real_system_property_find(name);
+	
+    if (!result &&
         (strncmp(name, "vendor.", 7) == 0 || strncmp(name, "ro.vendor.", 10) == 0)) {
-        ALOGI("fake_system_property_get: faking denied prop: %s", name);
-        value[0] = '0';
-        value[1] = '\0';
-        return 1;
+        LOGI("fake_system_property_find: faking denied prop: %s", name);
+        __system_property_add(name, strlen(name), "0", 1);
+        result = real_system_property_find(name);
     }
+
     return result;
-}
-
-static void fake_system_property_read_callback(
-    const prop_info *pi,
-    void (*callback)(void *, const char *, const char *, uint32_t),
-    void *cookie) {
-
-    auto wrapped_callback = [](void *cookie, const char *name, const char *value, uint32_t serial) {
-        const char *effective = (value && value[0]) ? value : "0";
-        auto real_cb = reinterpret_cast<void(*)(void*, const char*, const char*, uint32_t)>(
-            ((void**)cookie)[0]);
-        void *real_cookie = ((void**)cookie)[1];
-        real_cb(real_cookie, name, effective, serial);
-    };
-
-    void *wrapped[] = {(void*)callback, cookie};
-    real_system_property_read_callback(pi, wrapped_callback, wrapped);
 }
 
 static char* get_native_library_dir(JNIEnv* env, jobject context) {
@@ -468,9 +447,8 @@ static void init_turnip_driver(JNIEnv* env, jobject context) {
     gipa_stub = (PFN_vkGetInstanceProcAddr)shadowhook_hook_sym_name("libvulkan.so", "vkGetInstanceProcAddr", (void*)hooked_vkGetInstanceProcAddr, NULL);
     gdpa_stub = (PFN_vkGetDeviceProcAddr)shadowhook_hook_sym_name("libvulkan.so", "vkGetDeviceProcAddr", (void*)hooked_vkGetDeviceProcAddr, NULL);
 
-	prop_get_stub = shadowhook_hook_sym_name("libc.so", "__system_property_get", (void *)fake_system_property_get, (void **)&real_system_property_get);
-    prop_read_cb_stub = shadowhook_hook_sym_name("libc.so", "__system_property_read_callback", (void *)fake_system_property_read_callback, (void **)&real_system_property_read_callback);
-
+    prop_find_stub = shadowhook_hook_sym_name("libc.so", "__system_property_find", (void *)fake_system_property_find, (void **)&real_system_property_find);
+	
 	#ifdef OVERCLOCK
 	    ALOGI("Enabling Overclock make sure you have a fan cooler");
 	    adrenotools_set_turbo(true);
@@ -528,6 +506,12 @@ static void global_atomic_init() {
 	applyTurnipOptimizations();
 
     shadowhook_init(SHADOWHOOK_MODE_SHARED, false);
+}
+
+__attribute__((destructor)) void cleanup_property_hooks() {
+    if (prop_read_cb_stub) shadowhook_unhook(prop_read_cb_stub);
+    if (gipa_stub) shadowhook_unhook(gipa_stub);
+	if (gdpa_stub) shadowhook_unhook(gdpa_stub);
 }
 
 void perform_init(JavaVM* vm) {
