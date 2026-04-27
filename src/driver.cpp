@@ -296,7 +296,7 @@ static const prop_info *fake_system_property_find(const char *name) {
 	
     if (!result &&
         (strncmp(name, "vendor.", 7) == 0 || strncmp(name, "ro.vendor.", 10) == 0)) {
-        LOGI("fake_system_property_find: faking denied prop: %s", name);
+        ALOGI("fake_system_property_find: faking denied prop: %s", name);
         __system_property_add(name, strlen(name), "0", 1);
         result = real_system_property_find(name);
     }
@@ -509,9 +509,7 @@ static void global_atomic_init() {
 }
 
 __attribute__((destructor)) void cleanup_property_hooks() {
-    if (prop_read_cb_stub) shadowhook_unhook(prop_read_cb_stub);
-    if (gipa_stub) shadowhook_unhook(gipa_stub);
-	if (gdpa_stub) shadowhook_unhook(gdpa_stub);
+    if (prop_read_cb_stub) shadowhook_unhook(prop_find_stub);
 }
 
 void perform_init(JavaVM* vm) {
