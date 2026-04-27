@@ -11,7 +11,6 @@
 #include "kgsl.h"
 #include "hook_impl_params.h"
 #include "hook_impl.h"
-#include <sys/system_properties.h>
 
 #define TAG "hook_impl"
 #define LOGI(fmt, ...) __android_log_print(ANDROID_LOG_INFO, TAG, fmt, ##__VA_ARGS__)
@@ -25,38 +24,6 @@ int kgsl_fd;
 using gsl_memory_alloc_pure_t = decltype(gsl_memory_alloc_pure_sym);
 using gsl_memory_alloc_pure_64_t = decltype(gsl_memory_alloc_pure_64_sym);
 using gsl_memory_free_pure_t = decltype(gsl_memory_free_pure_sym);
-
-// Dynamic passthrough for unrestricted system property access
-extern "C" int __system_property_get(const char *name, char *value) {
-    static void* libc_handle = dlopen("libc.so", RTLD_NOLOAD);
-    if (!libc_handle) {
-        libc_handle = dlopen("libc.so", RTLD_NOW);
-    }
-
-    static auto real_property_get = libc_handle ? 
-        reinterpret_cast<int (*)(const char*, char*)>(dlsym(libc_handle, "__system_property_get")) : nullptr;
-
-    int result = 0;
-    
-    if (real_property_get) {
-        result = real_property_get(name, value);
-    }
-    
-    if (result == 0 || strlen(value) == 0) {
-        std::string prop_name(name);
-        
-        if (prop_name.find("hardware") != std::string::npos || prop_name.find("board") != std::string::npos) {
-            strcpy(value, "qcom");
-            return 4;
-        }
-        if (prop_name.find("gpu") != std::string::npos || prop_name.find("vendor") != std::string::npos) {
-            strcpy(value, "adreno");
-            return 6;
-        }
-    }
-
-    return result;
-}
 
 __attribute__((visibility("default"))) void init_hook_param(const void *param) {
     hook_params = reinterpret_cast<const HookImplParams *>(param);
