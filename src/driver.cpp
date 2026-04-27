@@ -300,7 +300,7 @@ static int fake_system_property_get(const char *name, char *value) {
 
     if (result == 0 && value[0] == '\0' &&
         (strncmp(name, "vendor.", 7) == 0 || strncmp(name, "ro.vendor.", 10) == 0)) {
-        LOGI("fake_system_property_get: faking denied prop: %s", name);
+        ALOGI("fake_system_property_get: faking denied prop: %s", name);
         value[0] = '0';
         value[1] = '\0';
         return 1;
