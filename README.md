@@ -4,7 +4,7 @@ credits to Pipetto-crypto for fixes and patches
 
 Credits To gamenative performance/WinNative source code for loading and some fixes
 
-Credits To MrPurple for env loader
+Credits To MrPurple for env loader (didn't even use it btw)
 
 Screenshot of turniup and its changing how UIs works btw
 
