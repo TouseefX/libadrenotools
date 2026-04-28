@@ -372,6 +372,8 @@ void applyTurnipOptimizations() {
                     // A8xx has large GMEM — so no sysmem under clock
                     setenv("TU_DEBUG", "gmem,noconfirm,noflushall,lowprecision", 1);
                     ALOGI("A8xx: gmem rendering enabled");
+                    ALOGI("UBWC: Enabling UBWC hint You are using A7xx");
+                    setenv("FD_DEV_FEATURES", "enable_tp_ubwc_flag_hint=1", 1);
                     break;
 
                 case AdrenoGen::A7xx:
@@ -383,23 +385,26 @@ void applyTurnipOptimizations() {
                     setenv("TU_DEBUG", "sysmem,noconfirm,noflushall,lowprecision", 1);
                     ALOGI("A7xx stock: sysmem rendering");
                #endif
+                    ALOGI("UBWC: Enabling UBWC hint You are using A7xx");
+                    setenv("FD_DEV_FEATURES", "enable_tp_ubwc_flag_hint=1", 1);
                     break;
 
                 case AdrenoGen::A6xx:
-                    setenv("TU_DEBUG", "sysmem,noconfirm,noflushall,lowprecision,nolrz", 1);
+                    setenv("TU_DEBUG", "sysmem,noconfirm,noflushall,lowprecision", 1);
                     ALOGI("A6xx: sysmem rendering");
+                    ALOGI("UBWC: GPU safe No hint required");
                     break;
 
                 case AdrenoGen::A5xx:
                     // A5xx: no UBWC, no reliable LRZ
-                    setenv("TU_DEBUG", "sysmem,noconfirm,nolrz", 1);
+                    setenv("TU_DEBUG", "sysmem,noconfirm,nolrz,noubwc", 1);
                     setenv("FD_DEV_FEATURES", "", 1);   // clear UBWC hint, not supported
-                    ALOGI("A5xx: conservative sysmem, UBWC disabled");
+                    ALOGW("A5xx: conservative sysmem, UBWC disabled");
                     break;
 
                 default:
                     setenv("TU_DEBUG", "sysmem,noconfirm,noflushall,lowprecision,nolrz", 1);
-                    ALOGI("Unknown Adreno gen: safe fallback");
+                    ALOGW("Unknown Adreno gen: safe fallback");
                     break;
             }
         }
@@ -430,11 +435,27 @@ static void apply_sdk_tunables() {
         ALOGI("Android <9: forcing Vulkan 1.1 via override");
     }
 
-    // UBWC flag hint only reliable on Android 11+ (API 30+)
-    if (sdk >= 30) {
+    char oneui_str[PROP_VALUE_MAX] = {0};
+    bool is_affected_oneui = false;
+    
+    if (__system_property_get("ro.build.version.oneui", oneui_str) > 0) {
+        int raw_version = atoi(oneui_str);
+        
+        // Target One UI 6.0 (60000) and newer versions like One UI 7 (70000)
+        if (raw_version >= 60000) {
+            is_affected_oneui = true;
+            int major = raw_version / 10000;
+            int minor = (raw_version % 10000) / 100;
+            ALOGI("Targeted One UI version detected: %d.%d", major, minor);
+        }
+    }
+
+    // Apply UBWC fix ONLY if it is an affected One UI version on Android 11+
+    if (is_affected_oneui && sdk >= 30) {
         setenv("FD_DEV_FEATURES", "enable_tp_ubwc_flag_hint=1", 1);
+        ALOGI("One UI 6.0+: UBWC flag hint enabled to prevent texture glitches");
     } else {
-        ALOGW("Android <11: UBWC flag hint disabled");
+        ALOGI("UBWC: Device Check  Completed Has no UBWC issues, checking GPU");
     }
 
 #ifdef OVERCLOCK
@@ -477,6 +498,7 @@ static void global_atomic_init() {
     setenv("GALLIUM_PRINT_OPTIONS", "0",      1);
     setenv("MESA_DEBUG",            "silent", 1);
     setenv("MESA_NO_ERROR",         "1",      1);
+    setenv("TU_ROBUST_BUFFER_ACCESS", "0",   1);
     
 
 #ifdef OVERCLOCK
@@ -486,12 +508,11 @@ static void global_atomic_init() {
     setenv("vblank_mode",            "0",       1);
     setenv("MESA_VK_WSI_PRESENT_MODE", "mailbox", 1);
 #else
-    setenv("KGSL_CONTEXT_PRIORITY",  "3",    1);
+    setenv("KGSL_CONTEXT_PRIORITY",  "2",    1);
     setenv("mesa_glthread",          "false", 1);
     setenv("ADRENO_TURBO",           "0",    1);
     setenv("vblank_mode",            "1",    1);
     setenv("MESA_VK_WSI_PRESENT_MODE", "fifo", 1);
-    setenv("TU_ROBUST_BUFFER_ACCESS", "0",   1);
 #endif
 
     // Unity integration
