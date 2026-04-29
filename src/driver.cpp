@@ -452,12 +452,12 @@ static void apply_sdk_tunables() {
 
     if (sdk >= 34) {
         ALOGI("Android 14+ detected: skipping Vulkan version override");
-    } else if (sdk >= 31) {
+    } else if (sdk >= 32) {
         setenv("MESA_VK_VERSION_OVERRIDE", "1.3", 1);
-        ALOGI("Android 12/13: forcing Vulkan 1.3 via override");
-    } else if (sdk >= 28) {
+        ALOGI("Android 12L/13: forcing Vulkan 1.3 via override");
+    } else if (sdk >= 31) {
         setenv("MESA_VK_VERSION_OVERRIDE", "1.2", 1);
-        ALOGI("Android 9-11: forcing Vulkan 1.2 via override");
+        ALOGI("Android 9-12: forcing Vulkan 1.2 via override");
     } else {
         setenv("MESA_VK_VERSION_OVERRIDE", "1.1", 1);
         ALOGI("Android <9: forcing Vulkan 1.1 via override");
