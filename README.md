@@ -24,7 +24,7 @@ Arm64
 
 Vulkan 1.3+ and driver must match your vulkan verison unless you're in the newer Android (14-16) or your gpu can support it
 
-Adero 650+
+Adero 510+
 
 Please create an issue if support for anything else is desired.
 
