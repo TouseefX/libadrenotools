@@ -367,7 +367,6 @@ static char *get_native_library_dir(JNIEnv *env, jobject context) {
 //  Per-GPU TU_DEBUG tuning
 // ─────────────────────────────────────────────────────────────────────────────
 void applyTurnipOptimizations() {
-	auto& props = *g_mesa_props;
     void* libvulkan = dlopen("libvulkan.so", RTLD_NOW);
     if (!libvulkan) return;
 
@@ -410,11 +409,15 @@ void applyTurnipOptimizations() {
         AdrenoGen gen = detect_adreno_gen(name);
         
         clear_tu_debug_flags();
+        
+        std::lock_guard<std::mutex> lock(g_props_mutex);
+        init_map_if_needed();
+        auto& m_props = *g_mesa_props;
 
         switch (gen) {
             case AdrenoGen::A8xx:
                 // A8xx: large GMEM, force gmem path
-                props["vendor.mesa.tu.gmem"]     = "1";
+                m_props["vendor.mesa.tu.gmem"]     = "1";
                 set_tu_debug_flag("gmem");
                 set_tu_debug_flag("noconfirm");
                 set_tu_debug_flag("noflushall");
@@ -426,25 +429,25 @@ void applyTurnipOptimizations() {
             case AdrenoGen::A7xx:
 #ifdef OVERCLOCK
                 // A7xx OC: gmem benefits from extra clock headroom
-                props["vendor.mesa.tu.gmem"] = "1";
+                m_props["vendor.mesa.tu.gmem"] = "1";
                 set_tu_debug_flag("gmem");
                 ALOGI("A7xx OC: gmem rendering");
 #else
                 // A7xx stock: sysmem runs cooler
-                props["vendor.mesa.tu.gmem"] = "0";
+                m_props["vendor.mesa.tu.gmem"] = "0";
                 set_tu_debug_flag("sysmem");
                 ALOGI("A7xx stock: sysmem rendering");
 #endif
                 set_tu_debug_flag("noconfirm");
                 set_tu_debug_flag("noflushall");
                 set_tu_debug_flag("lowprecision");
-                props["vendor.mesa.fd.dev.features"] = "enable_tp_ubwc_flag_hint=1";
+                m_props["vendor.mesa.fd.dev.features"] = "enable_tp_ubwc_flag_hint=1";
                 ALOGI("A7xx: UBWC hint enabled");
                 break;
 
             case AdrenoGen::A6xx:
                 // A6xx: sysmem, UBWC safe without hint
-                props["vendor.mesa.tu.gmem"] = "0";
+                m_props["vendor.mesa.tu.gmem"] = "0";
                 set_tu_debug_flag("sysmem");
                 set_tu_debug_flag("noconfirm");
                 set_tu_debug_flag("noflushall");
@@ -454,8 +457,8 @@ void applyTurnipOptimizations() {
 
             case AdrenoGen::A5xx:
                 // A5xx: no UBWC, no reliable LRZ
-                props["vendor.mesa.tu.gmem"]         = "0";
-                props["vendor.mesa.fd.dev.features"] = "";
+                m_props["vendor.mesa.tu.gmem"]         = "0";
+                m_props["vendor.mesa.fd.dev.features"] = "";
                 set_tu_debug_flag("sysmem");
                 set_tu_debug_flag("noconfirm");
                 set_tu_debug_flag("nolrz");
@@ -464,7 +467,7 @@ void applyTurnipOptimizations() {
                 break;
 
             default:
-                props["vendor.mesa.tu.gmem"] = "0";
+                m_props["vendor.mesa.tu.gmem"] = "0";
                 set_tu_debug_flag("sysmem");
                 set_tu_debug_flag("noconfirm");
                 set_tu_debug_flag("noflushall");
