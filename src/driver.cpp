@@ -34,6 +34,9 @@
 #include <sys/system_properties.h>
 #include <iostream>
 #include <android/dlext.h>
+#include <unordered_map>
+#include <cstdlib>
+#include <algorithm>
 
 #define ALOGI(...) __android_log_print(ANDROID_LOG_INFO,  "AdrenoToolsPatch", __VA_ARGS__)
 #define ALOGW(...) __android_log_print(ANDROID_LOG_WARN,  "AdrenoToolsPatch", __VA_ARGS__)
@@ -51,44 +54,8 @@ static PFN_vkGetInstanceProcAddr g_turnip_gipa   = nullptr;
 static PFN_vkGetDeviceProcAddr   g_turnip_gdpa   = nullptr;
 static std::once_flag            g_init_flag;
 static JavaVM                   *g_java_vm        = nullptr;
-
-static constexpr const char *kOwnedEnvVars[] = {
-    // Mesa / ICD
-    "MESA_VULKAN_ICD_SELECT",
-    "MESA_VK_IGNORE_CONFORMANCE_WARNING",
-    "MESA_VK_DEVICE_SELECT_FORCE_DEFAULT_DEVICE",
-    "MESA_VK_VERSION_OVERRIDE",
-    "MESA_VK_WSI_PRESENT_MODE",
-    "MESA_VK_CACHE_CONTROL",
-    // Shader cache
-    "MESA_GLSL_CACHE_DISABLE",
-    "MESA_GLSL_CACHE_MAX_SIZE",
-    // Mesa debug / error
-    "MESA_DEBUG",
-    "MESA_NO_ERROR",
-    "GALLIUM_PRINT_OPTIONS",
-    // Turnip-specific
-    "TU_DEBUG",
-    "TU_ROBUST_BUFFER_ACCESS",
-    "TU_OVERRIDE_HEAP_SIZE",
-    // Freedreno / device features
-    "FD_DEV_FEATURES",
-    // KGSL / display
-    "KGSL_CONTEXT_PRIORITY",
-    "ADRENO_TURBO",
-    "vblank_mode",
-    // GL thread
-    "mesa_glthread",
-    // Unity integration
-    "UNITY_DISABLE_GRAPHICS_DRIVER_CHECK",
-    "UNITY_VULKAN_ENABLE_VALIDATION_LAYERS",
-    "UNITY_GFX_DEVICE_API",
-    // unused but on old updates 
-    "TU_INDIRECT_DRAW_THRESHOLD",
-    "MESA_VK_DESCRIPTOR_POOL_TEMP",
-    "MESA_VK_ABORT_ON_DEVICE_LOSS",
-    "TU_FORCE_ANISO"
-};
+static std::unordered_map<std::string, std::string> g_mesa_props;
+static int (*orig_system_property_get)(const char*, char*) = nullptr;
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Adreno generation helpers
@@ -303,6 +270,22 @@ bool adrenotools_set_freedreno_env(const char *varName, const char *value) {
     return false;
 }
 
+// HELPERS
+static void set_tu_debug_flag(const char* flag, bool enable = true) {
+    std::string key = std::string("vendor.mesa.tu.debug.") + flag;
+    g_mesa_props[key] = enable ? "1" : "0";
+}
+
+static void clear_tu_debug_flags() {
+    for (const char* flag : {
+        "gmem", "sysmem", "noconfirm", "noflushall",
+        "lowprecision", "nolrz", "noubwc"
+    }) {
+        std::string key = std::string("vendor.mesa.tu.debug.") + flag;
+        g_mesa_props[key] = "0";
+    }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  Vulkan hook trampolines
 // ─────────────────────────────────────────────────────────────────────────────
@@ -320,6 +303,17 @@ static PFN_vkVoidFunction hooked_vkGetDeviceProcAddr(VkDevice device, const char
         if (func) return func;
     }
     return gdpa_stub ? gdpa_stub(device, pName) : nullptr;
+}
+
+static int hooked_system_property_get(const char* name, char* value) {
+    if (name) {
+        auto it = g_mesa_props.find(name);
+        if (it != g_mesa_props.end()) {
+            strlcpy(value, it->second.c_str(), PROP_VALUE_MAX);
+            return static_cast<int>(it->second.size());
+        }
+    }
+    return orig_system_property_get(name, value);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -358,7 +352,7 @@ static char *get_native_library_dir(JNIEnv *env, jobject context) {
 //  Per-GPU TU_DEBUG tuning
 // ─────────────────────────────────────────────────────────────────────────────
 void applyTurnipOptimizations() {
-    void *libvulkan = dlopen("libvulkan.so", RTLD_NOW);
+    void* libvulkan = dlopen("libvulkan.so", RTLD_NOW);
     if (!libvulkan) return;
 
     auto pfnCreateInstance =
@@ -376,70 +370,96 @@ void applyTurnipOptimizations() {
         return;
     }
 
-    VkInstance tempInstance       = VK_NULL_HANDLE;
-    VkInstanceCreateInfo ci       = {VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
+    VkInstance tempInstance = VK_NULL_HANDLE;
+    VkInstanceCreateInfo ci = {VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
 
-    if (pfnCreateInstance(&ci, nullptr, &tempInstance) == VK_SUCCESS) {
-        uint32_t count = 0;
-        pfnEnumeratePhysicalDevices(tempInstance, &count, nullptr);
-
-        if (count > 0) {
-            std::vector<VkPhysicalDevice> devices(count);
-            pfnEnumeratePhysicalDevices(tempInstance, &count, devices.data());
-
-            VkPhysicalDeviceProperties props{};
-            pfnGetPhysicalDeviceProperties(devices[0], &props);
-
-            std::string name(props.deviceName);
-            ALOGI("Detected GPU: %s", name.c_str());
-
-            AdrenoGen gen = detect_adreno_gen(name);
-
-            switch (gen) {
-                case AdrenoGen::A8xx:
-                    // A8xx has large GMEM — so no sysmem under clock
-                    setenv("TU_DEBUG", "gmem,noconfirm,noflushall,lowprecision", 1);
-                    ALOGI("A8xx: gmem rendering enabled");
-                    ALOGI("UBWC: Enabling UBWC hint You are using A7xx");
-                    setenv("FD_DEV_FEATURES", "enable_tp_ubwc_flag_hint=1", 1);
-                    break;
-
-                case AdrenoGen::A7xx:
-                    // A7xx: gmem benefits in overclock; sysmem is cooler at stock.
-               #ifdef OVERCLOCK
-                    setenv("TU_DEBUG", "gmem,noconfirm,noflushall,lowprecision", 1);
-                    ALOGI("A7xx OC: gmem rendering");
-               #else
-                    setenv("TU_DEBUG", "sysmem,noconfirm,noflushall,lowprecision", 1);
-                    ALOGI("A7xx stock: sysmem rendering");
-               #endif
-                    ALOGI("UBWC: Enabling UBWC hint You are using A7xx");
-                    setenv("FD_DEV_FEATURES", "enable_tp_ubwc_flag_hint=1", 1);
-                    break;
-
-                case AdrenoGen::A6xx:
-                    setenv("TU_DEBUG", "sysmem,noconfirm,noflushall,lowprecision", 1);
-                    ALOGI("A6xx: sysmem rendering");
-                    ALOGI("UBWC: GPU safe No hint required");
-                    break;
-
-                case AdrenoGen::A5xx:
-                    // A5xx: no UBWC, no reliable LRZ
-                    setenv("TU_DEBUG", "sysmem,noconfirm,nolrz,noubwc", 1);
-                    setenv("FD_DEV_FEATURES", "", 1);   // clear UBWC hint, not supported
-                    ALOGW("A5xx: conservative sysmem, UBWC disabled");
-                    break;
-
-                default:
-                    setenv("TU_DEBUG", "sysmem,noconfirm,noflushall,lowprecision,nolrz", 1);
-                    ALOGW("Unknown Adreno gen: safe fallback");
-                    break;
-            }
-        }
-
-        pfnDestroyInstance(tempInstance, nullptr);
+    if (pfnCreateInstance(&ci, nullptr, &tempInstance) != VK_SUCCESS) {
+        dlclose(libvulkan);
+        return;
     }
 
+    uint32_t count = 0;
+    pfnEnumeratePhysicalDevices(tempInstance, &count, nullptr);
+
+    if (count > 0) {
+        std::vector<VkPhysicalDevice> devices(count);
+        pfnEnumeratePhysicalDevices(tempInstance, &count, devices.data());
+
+        VkPhysicalDeviceProperties props{};
+        pfnGetPhysicalDeviceProperties(devices[0], &props);
+
+        std::string name(props.deviceName);
+        ALOGI("Detected GPU: %s", name.c_str());
+
+        AdrenoGen gen = detect_adreno_gen(name);
+        
+        clear_tu_debug_flags();
+
+        switch (gen) {
+            case AdrenoGen::A8xx:
+                // A8xx: large GMEM, force gmem path
+                g_mesa_props["vendor.mesa.tu.gmem"]     = "1";
+                set_tu_debug_flag("gmem");
+                set_tu_debug_flag("noconfirm");
+                set_tu_debug_flag("noflushall");
+                set_tu_debug_flag("lowprecision");
+                g_mesa_props["vendor.mesa.fd.dev.features"] = "enable_tp_ubwc_flag_hint=1";
+                ALOGI("A8xx: gmem + UBWC hint");
+                break;
+
+            case AdrenoGen::A7xx:
+#ifdef OVERCLOCK
+                // A7xx OC: gmem benefits from extra clock headroom
+                g_mesa_props["vendor.mesa.tu.gmem"] = "1";
+                set_tu_debug_flag("gmem");
+                ALOGI("A7xx OC: gmem rendering");
+#else
+                // A7xx stock: sysmem runs cooler
+                g_mesa_props["vendor.mesa.tu.gmem"] = "0";
+                set_tu_debug_flag("sysmem");
+                ALOGI("A7xx stock: sysmem rendering");
+#endif
+                set_tu_debug_flag("noconfirm");
+                set_tu_debug_flag("noflushall");
+                set_tu_debug_flag("lowprecision");
+                g_mesa_props["vendor.mesa.fd.dev.features"] = "enable_tp_ubwc_flag_hint=1";
+                ALOGI("A7xx: UBWC hint enabled");
+                break;
+
+            case AdrenoGen::A6xx:
+                // A6xx: sysmem, UBWC safe without hint
+                g_mesa_props["vendor.mesa.tu.gmem"] = "0";
+                set_tu_debug_flag("sysmem");
+                set_tu_debug_flag("noconfirm");
+                set_tu_debug_flag("noflushall");
+                set_tu_debug_flag("lowprecision");
+                ALOGI("A6xx: sysmem, no UBWC override needed");
+                break;
+
+            case AdrenoGen::A5xx:
+                // A5xx: no UBWC, no reliable LRZ
+                g_mesa_props["vendor.mesa.tu.gmem"]         = "0";
+                g_mesa_props["vendor.mesa.fd.dev.features"] = "";
+                set_tu_debug_flag("sysmem");
+                set_tu_debug_flag("noconfirm");
+                set_tu_debug_flag("nolrz");
+                set_tu_debug_flag("noubwc");
+                ALOGW("A5xx: conservative sysmem, UBWC+LRZ disabled");
+                break;
+
+            default:
+                g_mesa_props["vendor.mesa.tu.gmem"] = "0";
+                set_tu_debug_flag("sysmem");
+                set_tu_debug_flag("noconfirm");
+                set_tu_debug_flag("noflushall");
+                set_tu_debug_flag("lowprecision");
+                set_tu_debug_flag("nolrz");
+                ALOGW("Unknown Adreno: safe fallback");
+                break;
+        }
+    }
+
+    pfnDestroyInstance(tempInstance, nullptr);
     dlclose(libvulkan);
 }
 
@@ -447,114 +467,90 @@ static void apply_sdk_tunables() {
     char sdk_str[8] = {};
     __system_property_get("ro.build.version.sdk", sdk_str);
     int sdk = atoi(sdk_str);
-
     ALOGI("Android SDK: %d", sdk);
-
-    if (sdk >= 34) {
-        ALOGI("Android 14+ detected: skipping Vulkan version override");
-    } else if (sdk >= 32) {
-        setenv("MESA_VK_VERSION_OVERRIDE", "1.3", 1);
-        ALOGI("Android 12L/13: forcing Vulkan 1.3 via override");
-    } else if (sdk >= 31) {
-        setenv("MESA_VK_VERSION_OVERRIDE", "1.2", 1);
-        ALOGI("Android 9-12: forcing Vulkan 1.2 via override");
-    } else {
-        setenv("MESA_VK_VERSION_OVERRIDE", "1.1", 1);
-        ALOGI("Android <9: forcing Vulkan 1.1 via override");
-    }
-
-    char oneui_str[PROP_VALUE_MAX] = {0};
-    bool is_affected_oneui = false;
     
+    if (sdk >= 34) {
+        ALOGI("Android 14+: no Vulkan version override");
+    } else if (sdk >= 32) {
+        g_mesa_props["vendor.mesa.vk.version.override"] = "1.3";
+        ALOGI("Android 12L/13: Vulkan 1.3");
+    } else if (sdk >= 31) {
+        g_mesa_props["vendor.mesa.vk.version.override"] = "1.2";
+        ALOGI("Android 12: Vulkan 1.2");
+    } else {
+        g_mesa_props["vendor.mesa.vk.version.override"] = "1.1";
+        ALOGI("Android <12: Vulkan 1.1");
+    }
+    
+    char oneui_str[PROP_VALUE_MAX] = {};
     if (__system_property_get("ro.build.version.oneui", oneui_str) > 0) {
-        int raw_version = atoi(oneui_str);
-        
-        // Target One UI 6.0 (60000) and newer versions like One UI 7 (70000)
-        if (raw_version >= 60000) {
-            is_affected_oneui = true;
-            int major = raw_version / 10000;
-            int minor = (raw_version % 10000) / 100;
-            ALOGI("Targeted One UI version detected: %d.%d", major, minor);
+        int raw = atoi(oneui_str);
+        if (raw >= 60000 && sdk >= 30) {
+            if (g_mesa_props.find("vendor.mesa.fd.dev.features") == g_mesa_props.end()) {
+                g_mesa_props["vendor.mesa.fd.dev.features"] = "enable_tp_ubwc_flag_hint=1";
+                ALOGI("One UI 6.0+: UBWC hint set");
+            }
         }
     }
+    
+    g_mesa_props["vendor.mesa.glsl.cache.disable"]  = "false";
+    g_mesa_props["vendor.mesa.glsl.cache.max.size"] = "512M";
+    g_mesa_props["vendor.mesa.vk.cache.control"]    = "1";
 
-    // Apply UBWC fix ONLY if it is an affected One UI version on Android 11+
-    if (is_affected_oneui && sdk >= 30) {
-        setenv("FD_DEV_FEATURES", "enable_tp_ubwc_flag_hint=1", 1);
-        ALOGI("One UI 6.0+: UBWC flag hint enabled to prevent texture glitches");
-    } else {
-        ALOGI("UBWC: Device Check  Completed Has no UBWC issues, checking GPU");
-    }
+    // Heap
+    // TU_OVERRIDE_HEAP_SIZE → vendor.mesa.tu.override.heap.size
+#ifdef OVERCLOCK
+    ALOGI("OC mode: no heap cap");
+#else
+    long pages     = sysconf(_SC_PHYS_PAGES);
+    long page_size = sysconf(_SC_PAGESIZE);
+    long heap_mb   = (long)std::max(256LL,
+                         (long long)pages * page_size / (1024 * 1024) / 2);
+    g_mesa_props["vendor.mesa.tu.override.heap.size"] = std::to_string(heap_mb);
+    ALOGI("Heap: %ld MB", heap_mb);
+#endif
+
+    g_mesa_props["vendor.mesa.vulkan.icd.select"]                     = "turnip";
+    g_mesa_props["vendor.mesa.vk.ignore.conformance.warning"]         = "true";
+    g_mesa_props["vendor.mesa.vk.device.select.force.default.device"] = "1";
+    g_mesa_props["vendor.mesa.gralloc.api"]                           = "gralloc4";
+    g_mesa_props["vendor.mesa.extension.override"]                    = "-VK_KHR_external_memory_fd";
+    g_mesa_props["vendor.mesa.gallium.print.options"]                 = "0";
+    g_mesa_props["vendor.mesa.debug"]                                 = "silent";
+    g_mesa_props["vendor.mesa.no.error"]                              = "1";
+    g_mesa_props["vendor.mesa.tu.robust.buffer.access"]               = "0";
 
 #ifdef OVERCLOCK
-    ALOGI("Overclock mode: no TU_OVERRIDE_HEAP_SIZE cap");
+    g_mesa_props["vendor.mesa.glthread"]            = "true";
+    g_mesa_props["vendor.mesa.vk.wsi.present.mode"] = "mailbox";
 #else
-    long pages = sysconf(_SC_PHYS_PAGES);
-    long page_size = sysconf(_SC_PAGESIZE);
-    long long total_ram_bytes = (long long)pages * page_size;
-    
-    long heap_size_mb = (total_ram_bytes / (1024 * 1024)) / 2;
-    
-    if (heap_size_mb < 256) {
-        heap_size_mb = 256;
-    }
-
-    char heap_str[16];
-    snprintf(heap_str, sizeof(heap_str), "%ld", heap_size_mb);
-    
-    setenv("TU_OVERRIDE_HEAP_SIZE", heap_str, 1);
-    ALOGI("Set TU_OVERRIDE_HEAP_SIZE to %s MB based on system RAM", heap_str);
+    g_mesa_props["vendor.mesa.glthread"]            = "false";
+    g_mesa_props["vendor.mesa.vk.wsi.present.mode"] = "fifo";
 #endif
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Constructor — sets settings and runs before any hooks
+//  Constructor
 // ─────────────────────────────────────────────────────────────────────────────
 __attribute__((constructor))
 static void global_atomic_init() {
-    for (const char *var : kOwnedEnvVars) {
-        if (unsetenv(var) != 0)
-            ALOGW("unsetenv('%s') failed (errno %d)", var, errno);
-    }
-    // Mesa ICD / driver selection
-    setenv("MESA_VULKAN_ICD_SELECT",              "turnip",  1);
-    setenv("MESA_VK_IGNORE_CONFORMANCE_WARNING",  "true",    1);
-    setenv("MESA_VK_DEVICE_SELECT_FORCE_DEFAULT_DEVICE", "1", 1);
-    // Shader cache
-    setenv("MESA_GLSL_CACHE_DISABLE",  "false", 1);
-    setenv("MESA_GLSL_CACHE_MAX_SIZE", "512M",  1);
-    setenv("MESA_VK_CACHE_CONTROL",    "1",     1);
-    // Suppress noise
-    setenv("GALLIUM_PRINT_OPTIONS", "0",      1);
-    setenv("MESA_DEBUG",            "silent", 1);
-    setenv("MESA_NO_ERROR",         "1",      1);
-    setenv("TU_ROBUST_BUFFER_ACCESS", "0",   1);
-	// fix gallium
-	setenv("MESA_GRALLOC_API", "gralloc4", 1);
-    setenv("MESA_EXTENSION_OVERRIDE", "-VK_KHR_external_memory_fd", 1);
-
+    apply_sdk_tunables();
+    applyTurnipOptimizations();
+    
 #ifdef OVERCLOCK
-    setenv("KGSL_CONTEXT_PRIORITY",  "1",       1);
-    setenv("mesa_glthread",          "true",    1);
-    setenv("ADRENO_TURBO",           "1",       1);
-    setenv("vblank_mode",            "0",       1);
-    setenv("MESA_VK_WSI_PRESENT_MODE", "mailbox", 1);
+    setenv("KGSL_CONTEXT_PRIORITY", "1", 1);
+    setenv("ADRENO_TURBO",          "1", 1);
+    setenv("vblank_mode",           "0", 1);
 #else
-    setenv("KGSL_CONTEXT_PRIORITY",  "2",    1);
-    setenv("mesa_glthread",          "false", 1);
-    setenv("ADRENO_TURBO",           "0",    1);
-    setenv("vblank_mode",            "1",    1);
-    setenv("MESA_VK_WSI_PRESENT_MODE", "fifo", 1);
+    setenv("KGSL_CONTEXT_PRIORITY", "2", 1);
+    setenv("ADRENO_TURBO",          "0", 1);
+    setenv("vblank_mode",           "1", 1);
 #endif
-    // Unity integration
+
     setenv("UNITY_DISABLE_GRAPHICS_DRIVER_CHECK",   "1",      1);
     setenv("UNITY_VULKAN_ENABLE_VALIDATION_LAYERS",  "0",      1);
     setenv("UNITY_GFX_DEVICE_API",                  "vulkan", 1);
-    // SDK-aware tunables (Vulkan version override, UBWC, heap)
-    apply_sdk_tunables();
-    // Per-GPU TU_DEBUG flags
-    applyTurnipOptimizations();
-
+    
     shadowhook_init(SHADOWHOOK_MODE_SHARED, true);
 }
 
@@ -637,7 +633,8 @@ static void init_turnip_driver(JNIEnv *env, jobject context) {
     }
 
     ALOGI("Turnip loaded — installing hooks");
-	
+    
+    shadowhook_hook_sym_name("libc.so", "__system_property_get", reinterpret_cast<void*>(hooked_system_property_get), reinterpret_cast<void**>(&orig_system_property_get));
     gipa_stub = (PFN_vkGetInstanceProcAddr)shadowhook_hook_sym_name("libvulkan.so", "vkGetInstanceProcAddr", (void *)hooked_vkGetInstanceProcAddr, nullptr);
     gdpa_stub = (PFN_vkGetDeviceProcAddr)shadowhook_hook_sym_name("libvulkan.so", "vkGetDeviceProcAddr", (void *)hooked_vkGetDeviceProcAddr, nullptr);
 
