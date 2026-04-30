@@ -305,23 +305,33 @@ bool adrenotools_set_freedreno_env(const char *varName, const char *value) {
 }
 
 void set_mesa_opt(const char* env_name, const char* value, int dummy) {
+    // Keep the env var updated for the local process
     setenv(env_name, value, 1);
     
-    std::string prop = env_name;
-    std::transform(prop.begin(), prop.end(), prop.begin(), ::tolower);
-    std::replace(prop.begin(), prop.end(), '_', '.');
-    
-    if (prop.compare(0, 5, "mesa.") == 0) {
-        prop.erase(0, 5);
+    char key[PROP_NAME_MAX];
+    char *p = key;
+    char *end = key + PROP_NAME_MAX;
+	
+    if (strncmp(env_name, "MESA_", 5) != 0) {
+        p += strlcpy(p, "mesa.", end - p);
     }
-    prop = "mesa." + prop;
+    strlcpy(p, env_name, end - p);
+	
+    for (int i = 0; key[i]; i++) {
+        key[i] = (key[i] == '_') ? '.' : tolower((unsigned char)key[i]);
+    }
+	
+    char debug_prop[PROP_NAME_MAX];
+    snprintf(debug_prop, sizeof(debug_prop), "debug.%s", key);
     
-    std::string debug_prop = "debug." + prop;
-    
-    if (__system_property_set(debug_prop.c_str(), value) == 0) {
-        ALOGI("Successfully set: %s = %s (Env: %s)", debug_prop.c_str(), value, env_name);
+    if (__system_property_set(debug_prop, value) == 0) {
+        ALOGI("Successfully set: %s = %s", debug_prop, value);
     } else {
-        ALOGE("Failed to set property: %s", debug_prop.c_str());
+        if (__system_property_set(key, value) == 0) {
+            ALOGI("Successfully set: %s = %s", key, value);
+        } else {
+            ALOGE("Failed to set property: %s", debug_prop);
+        }
     }
 }
 
