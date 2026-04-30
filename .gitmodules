@@ -1,6 +1,6 @@
 [submodule "lib/linkernsbypass"]
 	path = lib/linkernsbypass
-	url = https://github.com/utkarshdalal/liblinkernsbypass.git
+	url = https://github.com/Pipetto-crypto/liblinkernsbypass.git
 	branch = master
 
 [submodule "lib/ShadowHook"]
