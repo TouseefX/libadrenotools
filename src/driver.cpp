@@ -51,6 +51,7 @@ static PFN_vkGetInstanceProcAddr g_turnip_gipa   = nullptr;
 static PFN_vkGetDeviceProcAddr   g_turnip_gdpa   = nullptr;
 static std::once_flag            g_init_flag;
 static JavaVM                   *g_java_vm        = nullptr;
+static struct prop_info {} mesa_prop_info;
 
 static constexpr const char *kOwnedEnvVars[] = {
     // Mesa / ICD
@@ -322,6 +323,31 @@ static PFN_vkVoidFunction hooked_vkGetDeviceProcAddr(VkDevice device, const char
     return gdpa_stub ? gdpa_stub(device, pName) : nullptr;
 }
 
+static const prop_info *my_system_property_find(const char *name) {
+    if (name && strncmp(name, "vendor.mesa.", 12) == 0) {
+        return &mesa_prop_info;
+    }
+    
+    return (const prop_info *)BYTEHOOK_CALL_PREV(my_system_property_find, name);
+}
+
+static int my_system_property_get(const char *name, char *value) {
+    if (name && strncmp(name, "vendor.mesa.", 12) == 0) {
+        if (strcmp(name, "vendor.mesa.driver") == 0) {
+            strcpy(value, "msm");
+            return 3;
+        }
+        if (strcmp(name, "vendor.mesa.gralloc") == 0) {
+            strcpy(value, "gralloc4");
+            return 8;
+        }
+        
+        value[0] = '\0';
+        return 0;
+    }
+    return BYTEHOOK_CALL_PREV(my_system_property_get, name, value);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  JNI helper
 // ─────────────────────────────────────────────────────────────────────────────
@@ -556,6 +582,7 @@ static void global_atomic_init() {
     applyTurnipOptimizations();
 
     shadowhook_init(SHADOWHOOK_MODE_SHARED, true);
+	bytehook_init(BYTEHOOK_MODE_AUTOMATIC, false);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -637,6 +664,9 @@ static void init_turnip_driver(JNIEnv *env, jobject context) {
     }
 
     ALOGI("Turnip loaded — installing hooks");
+
+	bytehook_hook_all(NULL, "__system_property_find", (void *)my_system_property_find, NULL, NULL);
+    bytehook_hook_all(NULL, "__system_property_get", (void *)my_system_property_get, NULL, NULL);
 	
     gipa_stub = (PFN_vkGetInstanceProcAddr)shadowhook_hook_sym_name("libvulkan.so", "vkGetInstanceProcAddr", (void *)hooked_vkGetInstanceProcAddr, nullptr);
     gdpa_stub = (PFN_vkGetDeviceProcAddr)shadowhook_hook_sym_name("libvulkan.so", "vkGetDeviceProcAddr", (void *)hooked_vkGetDeviceProcAddr, nullptr);
