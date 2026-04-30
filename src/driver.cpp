@@ -548,6 +548,8 @@ static void global_atomic_init() {
     setenv("UNITY_DISABLE_GRAPHICS_DRIVER_CHECK",   "1",      1);
     setenv("UNITY_VULKAN_ENABLE_VALIDATION_LAYERS",  "0",      1);
     setenv("UNITY_GFX_DEVICE_API",                  "vulkan", 1);
+	setenv("SKIA_RENDERER", "skiavk", 1);
+    setenv("HWUI_RENDERER", "skiavk", 1);
     // SDK-aware tunables (Vulkan version override, UBWC, heap)
     apply_sdk_tunables();
     // Per-GPU TU_DEBUG flags
