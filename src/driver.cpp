@@ -484,6 +484,49 @@ static void global_atomic_init() {
     setenv("UNITY_VULKAN_ENABLE_VALIDATION_LAYERS", "0", 1);
 	setenv("UNITY_GFX_DEVICE_API", "vulkan", 1);
 
+	long pages = sysconf(_SC_PHYS_PAGES);
+    long page_size = sysconf(_SC_PAGESIZE);
+    long long total_ram_bytes = (long long)pages * page_size;
+    
+    long heap_size_mb = (total_ram_bytes / (1024 * 1024)) / 2;
+    
+    if (heap_size_mb < 256) {
+        heap_size_mb = 256;
+    }
+
+    char heap_str[16];
+    snprintf(heap_str, sizeof(heap_str), "%ld", heap_size_mb);
+    
+    setenv("TU_OVERRIDE_HEAP_SIZE", heap_str, 1);
+    ALOGI("Set TU_OVERRIDE_HEAP_SIZE to %s MB based on system RAM", heap_str);
+
+	char sdk_str[8] = {};
+    __system_property_get("ro.build.version.sdk", sdk_str);
+    int sdk = atoi(sdk_str);
+
+    ALOGI("Android SDK: %d", sdk);
+
+    unsetenv("MESA_VK_VERSION_OVERRIDE");
+
+	char oneui_str[PROP_VALUE_MAX] = {0};
+    bool is_affected_oneui = false;
+    
+    if (__system_property_get("ro.build.version.oneui", oneui_str) > 0) {
+        int raw_version = atoi(oneui_str);
+		
+        if (raw_version >= 60000) {
+            is_affected_oneui = true;
+            int major = raw_version / 10000;
+            int minor = (raw_version % 10000) / 100;
+            ALOGI("Targeted One UI version detected: %d.%d", major, minor);
+        }
+	}
+
+	if (is_affected_oneui && sdk >= 30) {
+        setenv("FD_DEV_FEATURES", "enable_tp_ubwc_flag_hint=1", 1);
+        ALOGI("One UI 6.0+: UBWC flag hint enabled to prevent texture glitches");
+    }
+
 	applyTurnipOptimizations();
 
     shadowhook_init(SHADOWHOOK_MODE_SHARED, true);
