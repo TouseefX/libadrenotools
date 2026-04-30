@@ -52,18 +52,7 @@ add your libary to lib/arm64-v8a inside the apk and driver also
 
 just start the libary by adding a code to the application class On Created or attach contex base part
 
-once that is done edit the android manifest to add this
-```
-<uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS"/>
-```
-
 rebuild the apk and sign it
-
-and grant the permission for it to add settings
-
-```
-adb shell pm grant com.package.client android.permission.WRITE_SECURE_SETTINGS
-```
 
 but if the application does not have these you need to tell a dev to do it for you
 
