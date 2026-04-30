@@ -54,7 +54,8 @@ static PFN_vkGetInstanceProcAddr g_turnip_gipa   = nullptr;
 static PFN_vkGetDeviceProcAddr   g_turnip_gdpa   = nullptr;
 static std::once_flag            g_init_flag;
 static JavaVM                   *g_java_vm        = nullptr;
-static std::unordered_map<std::string, std::string> g_mesa_props;
+static std::unordered_map<std::string, std::string>* (*g_mesa_props) = nullptr;
+static std::mutex g_props_mutex;
 static int (*orig_system_property_get)(const char*, char*) = nullptr;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -273,7 +274,7 @@ bool adrenotools_set_freedreno_env(const char *varName, const char *value) {
 // HELPERS
 static void set_tu_debug_flag(const char* flag, bool enable = true) {
     std::string key = std::string("vendor.mesa.tu.debug.") + flag;
-    g_mesa_props[key] = enable ? "1" : "0";
+    (*g_mesa_props)[key] = enable ? "1" : "0";
 }
 
 static void clear_tu_debug_flags() {
@@ -282,7 +283,14 @@ static void clear_tu_debug_flags() {
         "lowprecision", "nolrz", "noubwc"
     }) {
         std::string key = std::string("vendor.mesa.tu.debug.") + flag;
-        g_mesa_props[key] = "0";
+        (*g_mesa_props)[key] = "0";
+    }
+}
+
+static void ensure_props_initialized() {
+    std::lock_guard<std::mutex> lock(g_props_mutex);
+    if ((*g_mesa_props) == nullptr) {
+        (*g_mesa_props) = new std::unordered_map<std::string, std::string>();
     }
 }
 
@@ -307,10 +315,13 @@ static PFN_vkVoidFunction hooked_vkGetDeviceProcAddr(VkDevice device, const char
 
 static int hooked_system_property_get(const char* name, char* value) {
     if (name) {
-        auto it = g_mesa_props.find(name);
-        if (it != g_mesa_props.end()) {
-            strlcpy(value, it->second.c_str(), PROP_VALUE_MAX);
-            return static_cast<int>(it->second.size());
+        std::lock_guard<std::mutex> lock(g_props_mutex);
+        if ((*g_mesa_props)) {
+            auto it = (*g_mesa_props)->find(name);
+            if (it != (*g_mesa_props)->end()) {
+                strlcpy(value, it->second.c_str(), 92);
+                return static_cast<int>(it->second.size());
+            }
         }
     }
     return orig_system_property_get(name, value);
@@ -398,37 +409,37 @@ void applyTurnipOptimizations() {
         switch (gen) {
             case AdrenoGen::A8xx:
                 // A8xx: large GMEM, force gmem path
-                g_mesa_props["vendor.mesa.tu.gmem"]     = "1";
+                (*g_mesa_props)["vendor.mesa.tu.gmem"]     = "1";
                 set_tu_debug_flag("gmem");
                 set_tu_debug_flag("noconfirm");
                 set_tu_debug_flag("noflushall");
                 set_tu_debug_flag("lowprecision");
-                g_mesa_props["vendor.mesa.fd.dev.features"] = "enable_tp_ubwc_flag_hint=1";
+                (*g_mesa_props)["vendor.mesa.fd.dev.features"] = "enable_tp_ubwc_flag_hint=1";
                 ALOGI("A8xx: gmem + UBWC hint");
                 break;
 
             case AdrenoGen::A7xx:
 #ifdef OVERCLOCK
                 // A7xx OC: gmem benefits from extra clock headroom
-                g_mesa_props["vendor.mesa.tu.gmem"] = "1";
+                (*g_mesa_props)["vendor.mesa.tu.gmem"] = "1";
                 set_tu_debug_flag("gmem");
                 ALOGI("A7xx OC: gmem rendering");
 #else
                 // A7xx stock: sysmem runs cooler
-                g_mesa_props["vendor.mesa.tu.gmem"] = "0";
+                (*g_mesa_props)["vendor.mesa.tu.gmem"] = "0";
                 set_tu_debug_flag("sysmem");
                 ALOGI("A7xx stock: sysmem rendering");
 #endif
                 set_tu_debug_flag("noconfirm");
                 set_tu_debug_flag("noflushall");
                 set_tu_debug_flag("lowprecision");
-                g_mesa_props["vendor.mesa.fd.dev.features"] = "enable_tp_ubwc_flag_hint=1";
+                (*g_mesa_props)["vendor.mesa.fd.dev.features"] = "enable_tp_ubwc_flag_hint=1";
                 ALOGI("A7xx: UBWC hint enabled");
                 break;
 
             case AdrenoGen::A6xx:
                 // A6xx: sysmem, UBWC safe without hint
-                g_mesa_props["vendor.mesa.tu.gmem"] = "0";
+                (*g_mesa_props)["vendor.mesa.tu.gmem"] = "0";
                 set_tu_debug_flag("sysmem");
                 set_tu_debug_flag("noconfirm");
                 set_tu_debug_flag("noflushall");
@@ -438,8 +449,8 @@ void applyTurnipOptimizations() {
 
             case AdrenoGen::A5xx:
                 // A5xx: no UBWC, no reliable LRZ
-                g_mesa_props["vendor.mesa.tu.gmem"]         = "0";
-                g_mesa_props["vendor.mesa.fd.dev.features"] = "";
+                (*g_mesa_props)["vendor.mesa.tu.gmem"]         = "0";
+                (*g_mesa_props)["vendor.mesa.fd.dev.features"] = "";
                 set_tu_debug_flag("sysmem");
                 set_tu_debug_flag("noconfirm");
                 set_tu_debug_flag("nolrz");
@@ -448,7 +459,7 @@ void applyTurnipOptimizations() {
                 break;
 
             default:
-                g_mesa_props["vendor.mesa.tu.gmem"] = "0";
+                (*g_mesa_props)["vendor.mesa.tu.gmem"] = "0";
                 set_tu_debug_flag("sysmem");
                 set_tu_debug_flag("noconfirm");
                 set_tu_debug_flag("noflushall");
@@ -464,6 +475,9 @@ void applyTurnipOptimizations() {
 }
 
 static void apply_sdk_tunables() {
+	ensure_props_initialized();
+    std::lock_guard<std::mutex> lock(g_props_mutex);
+    
     char sdk_str[8] = {};
     __system_property_get("ro.build.version.sdk", sdk_str);
     int sdk = atoi(sdk_str);
@@ -472,13 +486,13 @@ static void apply_sdk_tunables() {
     if (sdk >= 34) {
         ALOGI("Android 14+: no Vulkan version override");
     } else if (sdk >= 32) {
-        g_mesa_props["vendor.mesa.vk.version.override"] = "1.3";
+        (*g_mesa_props)["vendor.mesa.vk.version.override"] = "1.3";
         ALOGI("Android 12L/13: Vulkan 1.3");
     } else if (sdk >= 31) {
-        g_mesa_props["vendor.mesa.vk.version.override"] = "1.2";
+        (*g_mesa_props)["vendor.mesa.vk.version.override"] = "1.2";
         ALOGI("Android 12: Vulkan 1.2");
     } else {
-        g_mesa_props["vendor.mesa.vk.version.override"] = "1.1";
+        (*g_mesa_props)["vendor.mesa.vk.version.override"] = "1.1";
         ALOGI("Android <12: Vulkan 1.1");
     }
     
@@ -486,19 +500,17 @@ static void apply_sdk_tunables() {
     if (__system_property_get("ro.build.version.oneui", oneui_str) > 0) {
         int raw = atoi(oneui_str);
         if (raw >= 60000 && sdk >= 30) {
-            if (g_mesa_props.find("vendor.mesa.fd.dev.features") == g_mesa_props.end()) {
-                g_mesa_props["vendor.mesa.fd.dev.features"] = "enable_tp_ubwc_flag_hint=1";
+            if ((*g_mesa_props).find("vendor.mesa.fd.dev.features") == (*g_mesa_props).end()) {
+                (*g_mesa_props)["vendor.mesa.fd.dev.features"] = "enable_tp_ubwc_flag_hint=1";
                 ALOGI("One UI 6.0+: UBWC hint set");
             }
         }
     }
     
-    g_mesa_props["vendor.mesa.glsl.cache.disable"]  = "false";
-    g_mesa_props["vendor.mesa.glsl.cache.max.size"] = "512M";
-    g_mesa_props["vendor.mesa.vk.cache.control"]    = "1";
-
-    // Heap
-    // TU_OVERRIDE_HEAP_SIZE → vendor.mesa.tu.override.heap.size
+    (*g_mesa_props)["vendor.mesa.glsl.cache.disable"]  = "false";
+    (*g_mesa_props)["vendor.mesa.glsl.cache.max.size"] = "512M";
+    (*g_mesa_props)["vendor.mesa.vk.cache.control"]    = "1";
+    
 #ifdef OVERCLOCK
     ALOGI("OC mode: no heap cap");
 #else
@@ -506,26 +518,26 @@ static void apply_sdk_tunables() {
     long page_size = sysconf(_SC_PAGESIZE);
     long heap_mb   = (long)std::max(256LL,
                          (long long)pages * page_size / (1024 * 1024) / 2);
-    g_mesa_props["vendor.mesa.tu.override.heap.size"] = std::to_string(heap_mb);
+    (*g_mesa_props)["vendor.mesa.tu.override.heap.size"] = std::to_string(heap_mb);
     ALOGI("Heap: %ld MB", heap_mb);
 #endif
 
-    g_mesa_props["vendor.mesa.vulkan.icd.select"]                     = "turnip";
-    g_mesa_props["vendor.mesa.vk.ignore.conformance.warning"]         = "true";
-    g_mesa_props["vendor.mesa.vk.device.select.force.default.device"] = "1";
-    g_mesa_props["vendor.mesa.gralloc.api"]                           = "gralloc4";
-    g_mesa_props["vendor.mesa.extension.override"]                    = "-VK_KHR_external_memory_fd";
-    g_mesa_props["vendor.mesa.gallium.print.options"]                 = "0";
-    g_mesa_props["vendor.mesa.debug"]                                 = "silent";
-    g_mesa_props["vendor.mesa.no.error"]                              = "1";
-    g_mesa_props["vendor.mesa.tu.robust.buffer.access"]               = "0";
+    (*g_mesa_props)["vendor.mesa.vulkan.icd.select"]                     = "turnip";
+    (*g_mesa_props)["vendor.mesa.vk.ignore.conformance.warning"]         = "true";
+    (*g_mesa_props)["vendor.mesa.vk.device.select.force.default.device"] = "1";
+    (*g_mesa_props)["vendor.mesa.gralloc.api"]                           = "gralloc4";
+    (*g_mesa_props)["vendor.mesa.extension.override"]                    = "-VK_KHR_external_memory_fd";
+    (*g_mesa_props)["vendor.mesa.gallium.print.options"]                 = "0";
+    (*g_mesa_props)["vendor.mesa.debug"]                                 = "silent";
+    (*g_mesa_props)["vendor.mesa.no.error"]                              = "1";
+    (*g_mesa_props)["vendor.mesa.tu.robust.buffer.access"]               = "0";
 
 #ifdef OVERCLOCK
-    g_mesa_props["vendor.mesa.glthread"]            = "true";
-    g_mesa_props["vendor.mesa.vk.wsi.present.mode"] = "mailbox";
+    (*g_mesa_props)["vendor.mesa.glthread"]            = "true";
+    (*g_mesa_props)["vendor.mesa.vk.wsi.present.mode"] = "mailbox";
 #else
-    g_mesa_props["vendor.mesa.glthread"]            = "false";
-    g_mesa_props["vendor.mesa.vk.wsi.present.mode"] = "fifo";
+    (*g_mesa_props)["vendor.mesa.glthread"]            = "false";
+    (*g_mesa_props)["vendor.mesa.vk.wsi.present.mode"] = "fifo";
 #endif
 }
 
