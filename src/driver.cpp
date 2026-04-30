@@ -422,7 +422,7 @@ void applyTurnipOptimizations() {
                 set_tu_debug_flag("noconfirm");
                 set_tu_debug_flag("noflushall");
                 set_tu_debug_flag("lowprecision");
-                props["vendor.mesa.fd.dev.features"] = "enable_tp_ubwc_flag_hint=1";
+                m_props["vendor.mesa.fd.dev.features"] = "enable_tp_ubwc_flag_hint=1";
                 ALOGI("A8xx: gmem + UBWC hint");
                 break;
 
