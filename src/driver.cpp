@@ -349,18 +349,15 @@ static bool safe_contains(const char* haystack, const char* needle) {
 }
 
 static void* hooked_dlopen(const char* filename, int flags) {
-    if (g_init_state.load(std::memory_order_acquire) != 2) {
+    if (g_init_state.load(std::memory_order_acquire) != 2) return real_dlopen(filename, flags);
+    if (!filename || (uintptr_t)filename < 0x1000) return real_dlopen(filename, flags);
+	
+    if (!(safe_contains(filename, "vulkan") || safe_contains(filename, "adreno"))) {
         return real_dlopen(filename, flags);
     }
 	
-    if (!filename || (uintptr_t)filename < 0x1000)
-        return real_dlopen(filename, flags);
-
-    if (g_in_hook)
-        return real_dlopen(filename, flags);
-
+    if (g_in_hook) return real_dlopen(filename, flags);
     g_in_hook = true;
-    struct ScopeGuard { ~ScopeGuard() { g_in_hook = false; } } guard;
 
     BYTEHOOK_STACK_SCOPE();
     const uintptr_t caller = (uintptr_t)BYTEHOOK_RETURN_ADDRESS();
@@ -368,16 +365,17 @@ static void* hooked_dlopen(const char* filename, int flags) {
     const int count = bypass_ranges_count.load(std::memory_order_acquire);
     for (int i = 0; i < count; ++i) {
         if (caller >= bypass_ranges[i].start && caller < bypass_ranges[i].end) {
+            g_in_hook = false;
             return real_dlopen(filename, flags);
         }
     }
 	
-    if (g_turnip_handle && (safe_contains(filename, "vulkan") || safe_contains(filename, "adreno")))
-    {
-        ALOGI("dlopen hook turnip handled for: %s", filename);
+    if (g_turnip_handle) {
+        g_in_hook = false;
         return g_turnip_handle;
     }
 	
+    g_in_hook = false;
     return real_dlopen(filename, flags);
 }
 
