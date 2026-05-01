@@ -10,6 +10,7 @@
 #include <sys/mman.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <signal.h>
 #include <dlfcn.h>
 #include <fcntl.h>
 #include <android/api-level.h>
@@ -34,7 +35,6 @@
 #include <sys/system_properties.h>
 #include <iostream>
 #include <android/dlext.h>
-#include <link.h>
 #include <sys/mman.h>
 
 #define ALOGI(...) __android_log_print(ANDROID_LOG_INFO, "AdrenoToolsPatch", __VA_ARGS__)
