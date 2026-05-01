@@ -280,7 +280,7 @@ struct MemRange {
 static std::mutex g_ranges_mutex;
 static MemRange bypass_ranges[64];
 static size_t bypass_ranges_count = 0;
-thread_local bool g_in_hook = false
+thread_local bool g_in_hook = false;
 
 static PFN_vkVoidFunction hooked_vkGetInstanceProcAddr(VkInstance instance, const char* pName) {
     if (g_turnip_gipa) {
