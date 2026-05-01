@@ -275,7 +275,6 @@ static void* (*real_dlopen)(const char*, int) = nullptr;
 static std::mutex g_ranges_mutex;
 static MemRange bypass_ranges[64];
 static size_t bypass_ranges_count = 0;
-static std::once_flag g_init_flag;
 
 static PFN_vkVoidFunction hooked_vkGetInstanceProcAddr(VkInstance instance, const char* pName) {
     if (g_turnip_gipa) {
