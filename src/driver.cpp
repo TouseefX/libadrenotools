@@ -34,6 +34,7 @@
 #include <sys/system_properties.h>
 #include <iostream>
 #include <android/dlext.h>
+#include <link.h>
 
 #define ALOGI(...) __android_log_print(ANDROID_LOG_INFO, "AdrenoToolsPatch", __VA_ARGS__)
 #define ALOGW(...) __android_log_print(ANDROID_LOG_WARN, "AdrenoToolsPatch", __VA_ARGS__)
@@ -271,7 +272,8 @@ static PFN_vkGetDeviceProcAddr g_turnip_gdpa = nullptr;
 static std::once_flag g_init_flag;
 static JavaVM* g_java_vm = nullptr;
 static void* (*real_dlopen)(const char*, int) = nullptr;
-static thread_local bool is_hooking = false;
+static uintptr_t adrenotools_start = 0;
+static uintptr_t adrenotools_end = 0;
 
 static PFN_vkVoidFunction hooked_vkGetInstanceProcAddr(VkInstance instance, const char* pName) {
     if (g_turnip_gipa) {
@@ -291,33 +293,48 @@ static PFN_vkVoidFunction hooked_vkGetDeviceProcAddr(VkDevice device, const char
     return nullptr;
 }
 
-static void* hooked_dlopen(const char* filename, int flags) {
-    if (is_hooking) {
-        return real_dlopen(filename, flags);
-    }
+void init_caller_check() {
+    dl_iterate_phdr([](struct dl_phdr_info* info, size_t size, void* data) {
+        if (strstr(info->dlpi_name, "libadrenotools") || 
+            strstr(info->dlpi_name, "libhook_impl")) {
+            
+            adrenotools_start = info->dlpi_addr;
+            // Find the end by looking at segments
+            for (int i = 0; i < info->dlpi_phnum; i++) {
+                uintptr_t end = info->dlpi_addr + info->dlpi_phdr[i].p_vaddr + info->dlpi_phdr[i].p_memsz;
+                if (end > adrenotools_end) adrenotools_end = end;
+            }
+        }
+        return 0;
+    }, nullptr);
+}
 
-    if (filename == nullptr || filename[0] == '\0') {
+static void* hooked_dlopen(const char* filename, int flags) {
+    BYTEHOOK_STACK_SCOPE();
+    void* caller = BYTEHOOK_RETURN_ADDRESS();
+	
+    uintptr_t addr = (uintptr_t)caller;
+    if (addr >= adrenotools_start && addr <= adrenotools_end) {
         return real_dlopen(filename, flags);
     }
 	
-    is_hooking = true;
-
-    if (strstr(filename, "vulkan") != nullptr) {
+    if (filename == nullptr || (uintptr_t)filename < 0x1000) {
+        return real_dlopen(filename, flags);
+    }
+	
+    if (strstr(filename, "vulkan")) {
         if (strstr(filename, "libvulkan.so") || 
             strstr(filename, "vulkan.adreno.so") || 
             strstr(filename, "vulkan.msm8998.so")) {
             
             if (g_turnip_handle != nullptr) {
                 ALOGI("Intercepted Vulkan load: %s -> Using Turnip", filename);
-                is_hooking = false; // Reset before return
                 return g_turnip_handle;
             }
         }
     }
-	
-    void* result = real_dlopen(filename, flags);
-    is_hooking = false;
-    return result;
+
+    return real_dlopen(filename, flags);
 }
 
 static char* get_native_library_dir(JNIEnv* env, jobject context) {
@@ -578,6 +595,8 @@ void perform_init(JavaVM* vm) {
     static jmethodID currentAppMid = env->GetStaticMethodID(activityThreadCls, "currentApplication", "()Landroid/app/Application;");
 
     jobject app = env->CallStaticObjectMethod(activityThreadCls, currentAppMid);
+
+	init_caller_check();
 
     if (app) {
         ALOGI("JNI_OnLoad: Initializing Turnip immediately");
