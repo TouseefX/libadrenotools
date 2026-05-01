@@ -272,6 +272,10 @@ static PFN_vkGetDeviceProcAddr g_turnip_gdpa = nullptr;
 static std::once_flag g_init_flag;
 static JavaVM* g_java_vm = nullptr;
 static void* (*real_dlopen)(const char*, int) = nullptr;
+struct MemRange {
+    uintptr_t start;
+    uintptr_t end;
+};
 static std::mutex g_ranges_mutex;
 static MemRange bypass_ranges[64];
 static size_t bypass_ranges_count = 0;
