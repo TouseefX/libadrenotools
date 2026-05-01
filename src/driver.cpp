@@ -34,7 +34,6 @@
 #include <sys/system_properties.h>
 #include <iostream>
 #include <android/dlext.h>
-#include <errno.h>
 
 #define ALOGI(...) __android_log_print(ANDROID_LOG_INFO, "AdrenoToolsPatch", __VA_ARGS__)
 #define ALOGW(...) __android_log_print(ANDROID_LOG_WARN, "AdrenoToolsPatch", __VA_ARGS__)
@@ -292,15 +291,6 @@ static PFN_vkVoidFunction hooked_vkGetDeviceProcAddr(VkDevice device, const char
 }
 
 static void* hooked_dlopen(const char* filename, int flags) {
-	const char* progname = getprogname();
-    if (progname != nullptr) {
-        if (strcmp(progname, "surfaceflinger") == 0 || 
-            strcmp(progname, "system_server") == 0 ||
-            strstr(progname, "systemui") != nullptr) {
-            return real_dlopen(filename, flags);
-        }
-	}
-	
     if (filename == nullptr || filename[0] == '\0') {
         return real_dlopen(filename, flags);
     }
@@ -319,7 +309,6 @@ static void* hooked_dlopen(const char* filename, int flags) {
 	
     return real_dlopen(filename, flags);
 }
-
 
 static char* get_native_library_dir(JNIEnv* env, jobject context) {
     char* native_libdir = nullptr;
