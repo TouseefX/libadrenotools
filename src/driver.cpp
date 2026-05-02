@@ -437,15 +437,15 @@ void applyTurnipOptimizations() {
             if (name.find("Adreno (TM) 7") != std::string::npos || 
                 name.find("Adreno (TM) 8") != std::string::npos) {
 				#ifdef OVERCLOCK
-				    setenv("TU_DEBUG", "noconform,hiprio,forcecb,noflushall,3d_load", 1);
+				    setenv("TU_DEBUG", "noconform,hiprio,forcecb,noflushall,3d_load,dynamic,unaligned_store,nolrzfc", 1);
 				#else
 				    setenv("TU_DEBUG", "noconform,noflushall,3d_load", 1);
 				#endif
             } else {
                 #ifdef OVERCLOCK
-				    setenv("TU_DEBUG", "sysmem,noconform,hiprio,noflushall,3d_load", 1);
+				    setenv("TU_DEBUG", "sysmem,noconform,hiprio,noflushall,3d_load,dynamic,unaligned_store,nolrzfc", 1);
 				#else
-				    setenv("TU_DEBUG", "sysmem,noconform,noflushall,3d_load", 1);
+				    setenv("TU_DEBUG", "sysmem,noconform,noflushall,3d_load,dynamic", 1);
 				#endif
             }
         }
