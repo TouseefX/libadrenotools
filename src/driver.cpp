@@ -487,7 +487,7 @@ static void init_turnip_driver(JNIEnv* env, jobject context) {
     snprintf(cache_dir, sizeof(cache_dir), "%s/turnip_shader_cache/", base_cache_path);
     mkdir(cache_dir, 0775);
 
-    setenv("MESA_DISK_CACHE_DIR", cache_dir, 1);
+    setenv("MESA_SHADER_CACHE_DIR", cache_dir, 1);
 
     g_turnip_handle = adrenotools_open_libvulkan(
         RTLD_GLOBAL | RTLD_NOW,
@@ -548,9 +548,10 @@ static void global_atomic_init() {
     setenv("MESA_VULKAN_ICD_SELECT", "turnip", 1);
     setenv("MESA_VK_IGNORE_CONFORMANCE_WARNING", "true", 1);
     setenv("MESA_VK_DEVICE_SELECT_FORCE_DEFAULT_DEVICE", "1", 1);
-	setenv("MESA_GLSL_CACHE_DISABLE", "false", 1);
-    setenv("MESA_GLSL_CACHE_MAX_SIZE", "512M", 1);
-	setenv("MESA_VK_CACHE_CONTROL", "1", 1);
+	setenv("MESA_SHADER_CACHE_DISABLE", "false", 1);
+    setenv("MESA_SHADER_CACHE_MAX_SIZE", "1G", 1);
+	setenv("MESA_DISK_CACHE_SINGLE_FILE", "1", 1);
+	setenv("MESA_DISK_CACHE_READ_ONLY", "false", 1);
     setenv("FD_DEV_FEATURES", "enable_tp_ubwc_flag_hint=1", 1);
     
     setenv("GALLIUM_PRINT_OPTIONS", "0", 1);
