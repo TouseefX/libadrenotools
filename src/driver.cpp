@@ -436,17 +436,17 @@ void applyTurnipOptimizations() {
             std::string name(props.deviceName);
             if (name.find("Adreno (TM) 7") != std::string::npos || 
                 name.find("Adreno (TM) 8") != std::string::npos) {
-				
 				#ifdef OVERCLOCK
-				    ALOGI("Use Gmem");
-				    setenv("TU_DEBUG", "gmem,noconfirm,noflushall", 1);
+				    setenv("TU_DEBUG", "noconform,hiprio,forcecb,noflushall,nobinmerging", 1);
 				#else
-				    ALOGI("Use Sysmem");
-				    setenv("TU_DEBUG", "sysmem,noconfirm,noflushall", 1);
+				    setenv("TU_DEBUG", "noconform,noflushall,nobinmerging", 1);
 				#endif
             } else {
-                setenv("TU_DEBUG", "sysmem,noconfirm,noflushall", 1);
-                ALOGI("Use System Memory");
+                #ifdef OVERCLOCK
+				    setenv("TU_DEBUG", "sysmem,noconform,hiprio,noflushall,nobinmerging", 1);
+				#else
+				    setenv("TU_DEBUG", "sysmem,noconform,noflushall,nobinmerging", 1);
+				#endif
             }
         }
         pfnDestroyInstance(tempInstance, nullptr);
