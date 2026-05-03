@@ -437,13 +437,13 @@ void applyTurnipOptimizations() {
             if (name.find("Adreno (TM) 7") != std::string::npos || 
                 name.find("Adreno (TM) 8") != std::string::npos) {
 				#ifdef OVERCLOCK
-				    setenv("TU_DEBUG", "noconform,hiprio,forcecb,noflushall,3d_load,dynamic,unaligned_store,nolrzfc", 1);
+				    setenv("TU_DEBUG", "noconform,hiprio,forcecb,noflushall,3d_load,dynamic,unaligned_store", 1);
 				#else
 				    setenv("TU_DEBUG", "noconform,noflushall,3d_load,dynamic", 1);
 				#endif
             } else {
                 #ifdef OVERCLOCK
-				    setenv("TU_DEBUG", "sysmem,noconform,hiprio,noflushall,3d_load,dynamic,unaligned_store,nolrzfc", 1);
+				    setenv("TU_DEBUG", "sysmem,noconform,hiprio,noflushall,3d_load,dynamic,unaligned_store", 1);
 				#else
 				    setenv("TU_DEBUG", "sysmem,noconform,noflushall,3d_load,dynamic", 1);
 				#endif
@@ -553,12 +553,14 @@ cleanup:
 __attribute__((constructor))
 static void global_atomic_init() {
     setenv("MESA_VULKAN_ICD_SELECT", "turnip", 1);
-    setenv("MESA_VK_IGNORE_CONFORMANCE_WARNING", "true", 1);
+    setenv("MESA_VK_IGNORE_CONFORMANCE_WARNING", "1", 1);
     setenv("MESA_VK_DEVICE_SELECT_FORCE_DEFAULT_DEVICE", "1", 1);
 	setenv("MESA_SHADER_CACHE_DISABLE", "0", 1);
     setenv("MESA_SHADER_CACHE_MAX_SIZE", "4G", 1);
 	setenv("MESA_DISK_CACHE_SINGLE_FILE", "1", 1);
 	setenv("MESA_DISK_CACHE_READ_ONLY", "0", 1);
+	setenv("TU_GMEM_MINSIZE", "128", 1);
+	setenv("MESA_VK_SEMAPHORE_TYPE", "timeline", 1);
     
     setenv("GALLIUM_PRINT_OPTIONS", "0", 1);
     setenv("MESA_DEBUG", "silent", 1);
