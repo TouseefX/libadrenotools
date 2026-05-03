@@ -416,7 +416,7 @@ void applyTurnipOptimizations() {
     auto pfnGetPhysicalDeviceProperties = (PFN_vkGetPhysicalDeviceProperties)dlsym(libvulkan, "vkGetPhysicalDeviceProperties");
     auto pfnDestroyInstance = (PFN_vkDestroyInstance)dlsym(libvulkan, "vkDestroyInstance");
 
-    if (!pfnCreateInstance || !pfnEnumeratePhysicalDevices) {
+    if (!pfnCreateInstance || !pfnEnumeratePhysicalDevices || !pfnGetPhysicalDeviceProperties) {
         dlclose(libvulkan);
         return;
     }
@@ -526,7 +526,11 @@ static void init_turnip_driver(JNIEnv* env, jobject context) {
 	#ifdef OVERCLOCK
 	    ALOGI("Enabling Overclock make sure you have a fan cooler");
 	    adrenotools_set_turbo(true);
-	    setpriority(PRIO_PROCESS, 0, -20);
+	    int ret = setpriority(PRIO_PROCESS, 0, -20);
+        if (ret != 0) {
+            ALOGI("setpriority to -20 failed (no root), trying -10");
+            setpriority(PRIO_PROCESS, 0, -10); // usually allowed without root
+	    }
 	#else
 	    ALOGI("using stranded mode");
 	    adrenotools_set_turbo(false);
@@ -650,12 +654,15 @@ void perform_init(JavaVM* vm) {
 
             jobject t_app = nullptr;
             for (int i = 0; i < 10 && !t_app; ++i) {
-                t_app = t_env->CallStaticObjectMethod(atCls, caMid);
-                if (!t_app) std::this_thread::sleep_for(std::chrono::milliseconds(100));
+               t_app = t_env->CallStaticObjectMethod(atCls, caMid);
+               if (!t_app) std::this_thread::sleep_for(std::chrono::milliseconds(100));
             }
 
             if (t_app) init_turnip_driver(t_env, t_app);
-            vm->DetachCurrentThread();
+               t_env->DeleteLocalRef(atCls);
+               if (t_app) t_env->DeleteLocalRef(t_app);
+
+           vm->DetachCurrentThread();
         }).detach();
     }
 }
