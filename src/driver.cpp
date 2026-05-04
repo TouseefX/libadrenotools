@@ -557,6 +557,8 @@ static void global_atomic_init() {
     setenv("MESA_VK_DEVICE_SELECT_FORCE_DEFAULT_DEVICE", "1", 1);
 	setenv("MESA_SHADER_CACHE_DISABLE", "false", 1);
     setenv("MESA_SHADER_CACHE_MAX_SIZE", "4G", 1);
+	unsetenv("MESA_DISK_CACHE_SINGLE_FILE");
+	unsetenv("MESA_DISK_CACHE_READ_ONLY");
 	
     setenv("GALLIUM_PRINT_OPTIONS", "0", 1);
     setenv("MESA_DEBUG", "silent", 1);
